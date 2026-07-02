@@ -1,0 +1,1006 @@
+     1→'use client'
+     2→
+     3→import { useCallback, useEffect, useRef, useState } from 'react'
+     4→import {
+     5→  Briefcase,
+     6→  Code2,
+     7→  Globe,
+     8→  Palette,
+     9→  PenLine,
+    10→  Plus,
+    11→  RefreshCw,
+    12→  Trash2,
+    13→  Loader2,
+    14→  Mail,
+    15→  Inbox,
+    16→  AlertCircle,
+    17→  Send,
+    18→  Sparkles,
+    19→} from 'lucide-react'
+    20→
+    21→import { cn } from '@/lib/utils'
+    22→import { formatCurrency, timeAgo } from '@/lib/format'
+    23→import { useToast } from '@/hooks/use-toast'
+    24→
+    25→import { Button } from '@/components/ui/button'
+    26→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    27→import { Badge } from '@/components/ui/badge'
+    28→import { Skeleton } from '@/components/ui/skeleton'
+    29→import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+    30→import { Label } from '@/components/ui/label'
+    31→import { Input } from '@/components/ui/input'
+    32→import { Textarea } from '@/components/ui/textarea'
+    33→import {
+    34→  Dialog,
+    35→  DialogContent,
+    36→  DialogDescription,
+    37→  DialogFooter,
+    38→  DialogHeader,
+    39→  DialogTitle,
+    40→} from '@/components/ui/dialog'
+    41→import {
+    42→  Select,
+    43→  SelectContent,
+    44→  SelectItem,
+    45→  SelectTrigger,
+    46→  SelectValue,
+    47→} from '@/components/ui/select'
+    48→import {
+    49→  AlertDialog,
+    50→  AlertDialogAction,
+    51→  AlertDialogCancel,
+    52→  AlertDialogContent,
+    53→  AlertDialogDescription,
+    54→  AlertDialogFooter,
+    55→  AlertDialogHeader,
+    56→  AlertDialogTitle,
+    57→} from '@/components/ui/alert-dialog'
+    58→
+    59→// ---------------- Types ----------------
+    60→
+    61→type Service = {
+    62→  id: string
+    63→  title: string
+    64→  description: string
+    65→  price: number
+    66→  category: string
+    67→  icon: string
+    68→  active: boolean
+    69→  createdAt: string
+    70→  _count?: { leads: number }
+    71→}
+    72→
+    73→type Lead = {
+    74→  id: string
+    75→  name: string
+    76→  email: string
+    77→  message: string
+    78→  serviceId: string | null
+    79→  status: 'new' | 'contacted' | 'won' | 'lost'
+    80→  createdAt: string
+    81→  service: Service | null
+    82→}
+    83→
+    84→type LeadStatus = Lead['status']
+    85→
+    86→// ---------------- Constants ----------------
+    87→
+    88→const ICON_WHITELIST = ['Briefcase', 'Globe', 'Palette', 'PenLine', 'Code2'] as const
+    89→type IconName = (typeof ICON_WHITELIST)[number]
+    90→
+    91→const ICON_MAP: Record<IconName, React.ComponentType<{ className?: string }>> = {
+    92→  Briefcase,
+    93→  Globe,
+    94→  Palette,
+    95→  PenLine,
+    96→  Code2,
+    97→}
+    98→
+    99→const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
+   100→  { value: 'new', label: 'New' },
+   101→  { value: 'contacted', label: 'Contacted' },
+   102→  { value: 'won', label: 'Won' },
+   103→  { value: 'lost', label: 'Lost' },
+   104→]
+   105→
+   106→const STATUS_BADGE_CLASS: Record<LeadStatus, string> = {
+   107→  new: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
+   108→  contacted: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+   109→  won: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+   110→  lost: 'bg-zinc-500/15 text-zinc-700 dark:text-zinc-300',
+   111→}
+   112→
+   113→function ServiceIcon({ name, className }: { name: string; className?: string }) {
+   114→  const Comp = ICON_MAP[name as IconName] ?? Briefcase
+   115→  return <Comp className={className} />
+   116→}
+   117→
+   118→function isEmail(v: string): boolean {
+   119→  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+   120→}
+   121→
+   122→// ---------------- Component ----------------
+   123→
+   124→export default function FreelanceModule() {
+   125→  const { toast } = useToast()
+   126→
+   127→  const [services, setServices] = useState<Service[]>([])
+   128→  const [leads, setLeads] = useState<Lead[]>([])
+   129→  const [loadingServices, setLoadingServices] = useState(true)
+   130→  const [loadingLeads, setLoadingLeads] = useState(true)
+   131→  const [servicesError, setServicesError] = useState<string | null>(null)
+   132→  const [leadsError, setLeadsError] = useState<string | null>(null)
+   133→
+   134→  // Dialog state
+   135→  const [hireService, setHireService] = useState<Service | null>(null)
+   136→  const [addServiceOpen, setAddServiceOpen] = useState(false)
+   137→
+   138→  const fetchServices = useCallback(async () => {
+   139→    setLoadingServices(true)
+   140→    setServicesError(null)
+   141→    try {
+   142→      const r = await fetch('/api/freelance/services', { cache: 'no-store' })
+   143→      if (!r.ok) throw new Error('Request failed')
+   144→      const data = (await r.json()) as Service[]
+   145→      setServices(data)
+   146→    } catch {
+   147→      setServicesError('Could not load services. Please try again.')
+   148→    } finally {
+   149→      setLoadingServices(false)
+   150→    }
+   151→  }, [])
+   152→
+   153→  const fetchLeads = useCallback(async () => {
+   154→    setLoadingLeads(true)
+   155→    setLeadsError(null)
+   156→    try {
+   157→      const r = await fetch('/api/freelance/leads', { cache: 'no-store' })
+   158→      if (!r.ok) throw new Error('Request failed')
+   159→      const data = (await r.json()) as Lead[]
+   160→      setLeads(data)
+   161→    } catch {
+   162→      setLeadsError('Could not load leads. Please try again.')
+   163→    } finally {
+   164→      setLoadingLeads(false)
+   165→    }
+   166→  }, [])
+   167→
+   168→  useEffect(() => {
+   169→    fetchServices()
+   170→    fetchLeads()
+   171→  }, [fetchServices, fetchLeads])
+   172→
+   173→  // ---------------- Mutations ----------------
+   174→
+   175→  async function handleCreateService(input: {
+   176→    title: string
+   177→    description: string
+   178→    price: string
+   179→    category: string
+   180→    icon: string
+   181→  }) {
+   182→    const r = await fetch('/api/freelance/services', {
+   183→      method: 'POST',
+   184→      headers: { 'Content-Type': 'application/json' },
+   185→      body: JSON.stringify(input),
+   186→    })
+   187→    if (!r.ok) {
+   188→      const err = await r.json().catch(() => ({}))
+   189→      throw new Error(err?.error ?? 'Failed to add service')
+   190→    }
+   191→    const created = (await r.json()) as Service
+   192→    setServices((prev) => [created, ...prev])
+   193→    toast({
+   194→      title: 'Service published',
+   195→      description: `${created.title} is now live.`,
+   196→    })
+   197→  }
+   198→
+   199→  async function handleCreateLead(input: {
+   200→    name: string
+   201→    email: string
+   202→    message: string
+   203→    serviceId: string | null
+   204→  }) {
+   205→    const r = await fetch('/api/freelance/leads', {
+   206→      method: 'POST',
+   207→      headers: { 'Content-Type': 'application/json' },
+   208→      body: JSON.stringify(input),
+   209→    })
+   210→    if (!r.ok) {
+   211→      const err = await r.json().catch(() => ({}))
+   212→      throw new Error(err?.error ?? 'Failed to send lead')
+   213→    }
+   214→    const created = (await r.json()) as Lead
+   215→    setLeads((prev) => [created, ...prev])
+   216→    setServices((prev) =>
+   217→      prev.map((s) =>
+   218→        s.id === created.serviceId
+   219→          ? { ...s, _count: { leads: (s._count?.leads ?? 0) + 1 } }
+   220→          : s
+   221→      )
+   222→    )
+   223→    toast({
+   224→      title: 'Lead sent',
+   225→      description: 'Thanks — the freelancer will reach out shortly.',
+   226→    })
+   227→  }
+   228→
+   229→  async function handleStatusChange(leadId: string, status: LeadStatus) {
+   230→    // Optimistic update
+   231→    const prev = leads
+   232→    setLeads((cur) =>
+   233→      cur.map((l) => (l.id === leadId ? { ...l, status } : l))
+   234→    )
+   235→    try {
+   236→      const r = await fetch(`/api/freelance/leads/${leadId}`, {
+   237→        method: 'PATCH',
+   238→        headers: { 'Content-Type': 'application/json' },
+   239→        body: JSON.stringify({ status }),
+   240→      })
+   241→      if (!r.ok) throw new Error()
+   242→      toast({
+   243→        title: 'Status updated',
+   244→        description: `Lead marked as ${status}.`,
+   245→      })
+   246→    } catch {
+   247→      setLeads(prev)
+   248→      toast({
+   249→        title: 'Update failed',
+   250→        description: 'Could not update status. Reverted.',
+   251→        variant: 'destructive',
+   252→      })
+   253→    }
+   254→  }
+   255→
+   256→  async function handleDeleteLead(leadId: string) {
+   257→    const prev = leads
+   258→    setLeads((cur) => cur.filter((l) => l.id !== leadId))
+   259→    try {
+   260→      const r = await fetch(`/api/freelance/leads/${leadId}`, {
+   261→        method: 'DELETE',
+   262→      })
+   263→      if (!r.ok) throw new Error()
+   264→      toast({
+   265→        title: 'Lead deleted',
+   266→        description: 'The lead has been removed from your inbox.',
+   267→      })
+   268→    } catch {
+   269→      setLeads(prev)
+   270→      toast({
+   271→        title: 'Delete failed',
+   272→        description: 'Could not delete lead. Restored.',
+   273→        variant: 'destructive',
+   274→      })
+   275→    }
+   276→  }
+   277→
+   278→  // ---------------- Render ----------------
+   279→
+   280→  return (
+   281→    <div className="space-y-6">
+   282→      {/* Header row */}
+   283→      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   284→        <div>
+   285→          <div className="flex items-center gap-2">
+   286→            <div
+   287→              className="flex h-9 w-9 items-center justify-center rounded-lg"
+   288→              style={{ backgroundColor: '#10b9811a', color: '#10b981' }}
+   289→            >
+   290→              <Briefcase className="h-5 w-5" />
+   291→            </div>
+   292→            <h2 className="text-2xl font-semibold tracking-tight">
+   293→              Freelance Hub
+   294→            </h2>
+   295→          </div>
+   296→          <p className="mt-1 text-sm text-muted-foreground">
+   297→            Showcase your services, capture leads, and track them through to a
+   298→            closed deal.
+   299→          </p>
+   300→        </div>
+   301→        <Button
+   302→          onClick={() => setAddServiceOpen(true)}
+   303→          className="bg-emerald-600 text-white hover:bg-emerald-600/90"
+   304→        >
+   305→          <Plus className="h-4 w-4" />
+   306→          Add service
+   307→        </Button>
+   308→      </div>
+   309→
+   310→      {/* Main grid */}
+   311→      <div className="grid gap-6 lg:grid-cols-3">
+   312→        {/* Services showcase (left 2 cols) */}
+   313→        <div className="space-y-4 lg:col-span-2">
+   314→          <div className="flex items-center justify-between">
+   315→            <h3 className="text-sm font-medium text-muted-foreground">
+   316→              Services showcase
+   317→            </h3>
+   318→            <Button
+   319→              variant="ghost"
+   320→              size="sm"
+   321→              onClick={fetchServices}
+   322→              disabled={loadingServices}
+   323→            >
+   324→              <RefreshCw
+   325→                className={cn('h-4 w-4', loadingServices && 'animate-spin')}
+   326→              />
+   327→              Refresh
+   328→            </Button>
+   329→          </div>
+   330→
+   331→          {servicesError ? (
+   332→            <Alert variant="destructive">
+   333→              <AlertCircle />
+   334→              <AlertTitle>Something went wrong</AlertTitle>
+   335→              <AlertDescription>
+   336→                <p>{servicesError}</p>
+   337→                <Button
+   338→                  variant="outline"
+   339→                  size="sm"
+   340→                  className="mt-2"
+   341→                  onClick={fetchServices}
+   342→                >
+   343→                  <RefreshCw className="h-4 w-4" />
+   344→                  Retry
+   345→                </Button>
+   346→              </AlertDescription>
+   347→            </Alert>
+   348→          ) : loadingServices ? (
+   349→            <div className="grid gap-4 sm:grid-cols-2">
+   350→              {Array.from({ length: 4 }).map((_, i) => (
+   351→                <Skeleton key={i} className="h-56 rounded-xl" />
+   352→              ))}
+   353→            </div>
+   354→          ) : services.length === 0 ? (
+   355→            <Card>
+   356→              <CardContent className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+   357→                <Sparkles className="h-8 w-8 text-muted-foreground" />
+   358→                <p className="text-sm text-muted-foreground">
+   359→                  No services yet. Add your first service to start capturing
+   360→                  leads.
+   361→                </p>
+   362→                <Button
+   363→                  className="mt-2 bg-emerald-600 text-white hover:bg-emerald-600/90"
+   364→                  onClick={() => setAddServiceOpen(true)}
+   365→                >
+   366→                  <Plus className="h-4 w-4" />
+   367→                  Add service
+   368→                </Button>
+   369→              </CardContent>
+   370→            </Card>
+   371→          ) : (
+   372→            <div className="grid gap-4 sm:grid-cols-2">
+   373→              {services.map((s) => (
+   374→                <ServiceCard
+   375→                  key={s.id}
+   376→                  service={s}
+   377→                  onHire={() => setHireService(s)}
+   378→                />
+   379→              ))}
+   380→            </div>
+   381→          )}
+   382→        </div>
+   383→
+   384→        {/* Leads inbox (right col) */}
+   385→        <div className="lg:col-span-1">
+   386→          <LeadsInbox
+   387→            leads={leads}
+   388→            loading={loadingLeads}
+   389→            error={leadsError}
+   390→            onRetry={fetchLeads}
+   391→            onStatusChange={handleStatusChange}
+   392→            onDelete={handleDeleteLead}
+   393→          />
+   394→        </div>
+   395→      </div>
+   396→
+   397→      {/* Add service dialog */}
+   398→      <AddServiceDialog
+   399→        open={addServiceOpen}
+   400→        onOpenChange={setAddServiceOpen}
+   401→        onSubmit={handleCreateService}
+   402→      />
+   403→
+   404→      {/* Hire me / lead dialog */}
+   405→      <HireDialog
+   406→        service={hireService}
+   407→        services={services}
+   408→        onOpenChange={(open) => {
+   409→          if (!open) setHireService(null)
+   410→        }}
+   411→        onSubmit={handleCreateLead}
+   412→      />
+   413→    </div>
+   414→  )
+   415→}
+   416→
+   417→// ---------------- Subcomponents ----------------
+   418→
+   419→function ServiceCard({
+   420→  service,
+   421→  onHire,
+   422→}: {
+   423→  service: Service
+   424→  onHire: () => void
+   425→}) {
+   426→  return (
+   427→    <Card className="gap-0 py-0 overflow-hidden transition-shadow hover:shadow-md">
+   428→      <div className="h-1.5 w-full bg-emerald-500" />
+   429→      <CardContent className="flex flex-col gap-4 p-5">
+   430→        <div className="flex items-start justify-between gap-3">
+   431→          <div
+   432→            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+   433→            style={{ backgroundColor: '#10b9811a', color: '#10b981' }}
+   434→          >
+   435→            <ServiceIcon name={service.icon} className="h-5 w-5" />
+   436→          </div>
+   437→          <Badge variant="outline" className="text-xs">
+   438→            {service.category}
+   439→          </Badge>
+   440→        </div>
+   441→
+   442→        <div className="space-y-1">
+   443→          <h4 className="font-semibold leading-tight">{service.title}</h4>
+   444→          <p className="text-sm text-muted-foreground line-clamp-2">
+   445→            {service.description}
+   446→          </p>
+   447→        </div>
+   448→
+   449→        <div className="flex items-end justify-between gap-2">
+   450→          <div>
+   451→            <p className="text-xs text-muted-foreground">Starting at</p>
+   452→            <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400">
+   453→              {formatCurrency(service.price)}
+   454→            </p>
+   455→          </div>
+   456→          {typeof service._count?.leads === 'number' && (
+   457→            <p className="text-xs text-muted-foreground">
+   458→              {service._count.leads}{' '}
+   459→              {service._count.leads === 1 ? 'lead' : 'leads'}
+   460→            </p>
+   461→          )}
+   462→        </div>
+   463→
+   464→        <Button
+   465→          className="w-full bg-emerald-600 text-white hover:bg-emerald-600/90"
+   466→          onClick={onHire}
+   467→        >
+   468→          <Send className="h-4 w-4" />
+   469→          Hire me
+   470→        </Button>
+   471→      </CardContent>
+   472→    </Card>
+   473→  )
+   474→}
+   475→
+   476→function LeadsInbox({
+   477→  leads,
+   478→  loading,
+   479→  error,
+   480→  onRetry,
+   481→  onStatusChange,
+   482→  onDelete,
+   483→}: {
+   484→  leads: Lead[]
+   485→  loading: boolean
+   486→  error: string | null
+   487→  onRetry: () => void
+   488→  onStatusChange: (id: string, status: LeadStatus) => void
+   489→  onDelete: (id: string) => void
+   490→}) {
+   491→  const [pendingDelete, setPendingDelete] = useState<Lead | null>(null)
+   492→
+   493→  return (
+   494→    <Card className="flex h-full flex-col">
+   495→      <CardHeader className="border-b">
+   496→        <CardTitle className="flex items-center justify-between text-base">
+   497→          <span className="flex items-center gap-2">
+   498→            <Inbox className="h-4 w-4" />
+   499→            Leads inbox
+   500→          </span>
+   501→          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+   502→            {leads.length}
+   503→          </Badge>
+   504→        </CardTitle>
+   505→      </CardHeader>
+   506→      <CardContent className="p-0">
+   507→        {error ? (
+   508→          <div className="p-4">
+   509→            <Alert variant="destructive">
+   510→              <AlertCircle />
+   511→              <AlertTitle>Something went wrong</AlertTitle>
+   512→              <AlertDescription>
+   513→                <p>{error}</p>
+   514→                <Button
+   515→                  variant="outline"
+   516→                  size="sm"
+   517→                  className="mt-2"
+   518→                  onClick={onRetry}
+   519→                >
+   520→                  <RefreshCw className="h-4 w-4" />
+   521→                  Retry
+   522→                </Button>
+   523→              </AlertDescription>
+   524→            </Alert>
+   525→          </div>
+   526→        ) : loading ? (
+   527→          <div className="space-y-3 p-4">
+   528→            {Array.from({ length: 3 }).map((_, i) => (
+   529→              <Skeleton key={i} className="h-28 w-full" />
+   530→            ))}
+   531→          </div>
+   532→        ) : leads.length === 0 ? (
+   533→          <div className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-center">
+   534→            <Mail className="h-7 w-7 text-muted-foreground" />
+   535→            <p className="text-sm text-muted-foreground">
+   536→              No leads yet — share your services!
+   537→            </p>
+   538→          </div>
+   539→        ) : (
+   540→          <div className="max-h-[600px] overflow-y-auto p-3 [scrollbar-width:thin]">
+   541→            <ul className="space-y-2">
+   542→              {leads.map((lead) => (
+   543→                <li
+   544→                  key={lead.id}
+   545→                  className="rounded-lg border bg-card p-3 transition-colors hover:bg-accent/40"
+   546→                >
+   547→                  <div className="flex items-start justify-between gap-2">
+   548→                    <div className="min-w-0">
+   549→                      <p className="truncate text-sm font-medium">
+   550→                        {lead.name}
+   551→                      </p>
+   552→                      <p className="truncate text-xs text-muted-foreground">
+   553→                        {lead.email}
+   554→                      </p>
+   555→                    </div>
+   556→                    <span className="shrink-0 text-xs text-muted-foreground">
+   557→                      {timeAgo(lead.createdAt)}
+   558→                    </span>
+   559→                  </div>
+   560→
+   561→                  <p className="mt-2 line-clamp-2 text-sm text-foreground/90">
+   562→                    {lead.message}
+   563→                  </p>
+   564→
+   565→                  <div className="mt-2 flex flex-wrap items-center gap-2">
+   566→                    {lead.service ? (
+   567→                      <Badge variant="outline" className="text-xs">
+   568→                        {lead.service.title}
+   569→                      </Badge>
+   570→                    ) : (
+   571→                      <Badge
+   572→                        variant="outline"
+   573→                        className="text-xs text-muted-foreground"
+   574→                      >
+   575→                        General
+   576→                      </Badge>
+   577→                    )}
+   578→                    <Badge className={cn('text-xs', STATUS_BADGE_CLASS[lead.status])}>
+   579→                      {lead.status}
+   580→                    </Badge>
+   581→                  </div>
+   582→
+   583→                  <div className="mt-3 flex items-center justify-between gap-2">
+   584→                    <Select
+   585→                      value={lead.status}
+   586→                      onValueChange={(v) =>
+   587→                        onStatusChange(lead.id, v as LeadStatus)
+   588→                      }
+   589→                    >
+   590→                      <SelectTrigger size="sm" className="h-8 w-36">
+   591→                        <SelectValue />
+   592→                      </SelectTrigger>
+   593→                      <SelectContent>
+   594→                        {STATUS_OPTIONS.map((o) => (
+   595→                          <SelectItem key={o.value} value={o.value}>
+   596→                            {o.label}
+   597→                          </SelectItem>
+   598→                        ))}
+   599→                      </SelectContent>
+   600→                    </Select>
+   601→
+   602→                    <Button
+   603→                      variant="ghost"
+   604→                      size="icon"
+   605→                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+   606→                      onClick={() => setPendingDelete(lead)}
+   607→                      aria-label="Delete lead"
+   608→                    >
+   609→                      <Trash2 className="h-4 w-4" />
+   610→                    </Button>
+   611→                  </div>
+   612→                </li>
+   613→              ))}
+   614→            </ul>
+   615→          </div>
+   616→        )}
+   617→      </CardContent>
+   618→
+   619→      <AlertDialog
+   620→        open={!!pendingDelete}
+   621→        onOpenChange={(open) => {
+   622→          if (!open) setPendingDelete(null)
+   623→        }}
+   624→      >
+   625→        <AlertDialogContent>
+   626→          <AlertDialogHeader>
+   627→            <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
+   628→            <AlertDialogDescription>
+   629→              {pendingDelete
+   630→                ? `This will permanently remove the lead from ${pendingDelete.name}. This action cannot be undone.`
+   631→                : ''}
+   632→            </AlertDialogDescription>
+   633→          </AlertDialogHeader>
+   634→          <AlertDialogFooter>
+   635→            <AlertDialogCancel>Cancel</AlertDialogCancel>
+   636→            <AlertDialogAction
+   637→              className="bg-destructive text-white hover:bg-destructive/90"
+   638→              onClick={() => {
+   639→                if (pendingDelete) onDelete(pendingDelete.id)
+   640→                setPendingDelete(null)
+   641→              }}
+   642→            >
+   643→              Delete
+   644→            </AlertDialogAction>
+   645→          </AlertDialogFooter>
+   646→        </AlertDialogContent>
+   647→      </AlertDialog>
+   648→    </Card>
+   649→  )
+   650→}
+   651→
+   652→// ---------------- Dialogs ----------------
+   653→
+   654→function AddServiceDialog({
+   655→  open,
+   656→  onOpenChange,
+   657→  onSubmit,
+   658→}: {
+   659→  open: boolean
+   660→  onOpenChange: (open: boolean) => void
+   661→  onSubmit: (input: {
+   662→    title: string
+   663→    description: string
+   664→    price: string
+   665→    category: string
+   666→    icon: string
+   667→  }) => Promise<void>
+   668→}) {
+   669→  const [title, setTitle] = useState('')
+   670→  const [description, setDescription] = useState('')
+   671→  const [price, setPrice] = useState('')
+   672→  const [category, setCategory] = useState('')
+   673→  const [icon, setIcon] = useState<string>('Briefcase')
+   674→  const [errors, setErrors] = useState<Record<string, string>>({})
+   675→  const [submitting, setSubmitting] = useState(false)
+   676→
+   677→  const resetForm = () => {
+   678→    setTitle('')
+   679→    setDescription('')
+   680→    setPrice('')
+   681→    setCategory('')
+   682→    setIcon('Briefcase')
+   683→    setErrors({})
+   684→  }
+   685→
+   686→  // Reset form whenever the dialog opens
+   687→  const prevOpen = useRef(false)
+   688→  useEffect(() => {
+   689→    if (open && !prevOpen.current) {
+   690→      resetForm()
+   691→    }
+   692→    prevOpen.current = open
+   693→  }, [open])
+   694→
+   695→  function validate(): boolean {
+   696→    const e: Record<string, string> = {}
+   697→    if (!title.trim()) e.title = 'Title is required'
+   698→    if (!description.trim()) e.description = 'Description is required'
+   699→    if (!category.trim()) e.category = 'Category is required'
+   700→    const priceNum = Number(price)
+   701→    if (!price.trim() || !Number.isFinite(priceNum) || priceNum < 0) {
+   702→      e.price = 'Enter a valid price'
+   703→    }
+   704→    setErrors(e)
+   705→    return Object.keys(e).length === 0
+   706→  }
+   707→
+   708→  async function handleSubmit(ev: React.FormEvent) {
+   709→    ev.preventDefault()
+   710→    if (!validate()) return
+   711→    setSubmitting(true)
+   712→    try {
+   713→      await onSubmit({
+   714→        title: title.trim(),
+   715→        description: description.trim(),
+   716→        price,
+   717→        category: category.trim(),
+   718→        icon,
+   719→      })
+   720→      onOpenChange(false)
+   721→    } catch (err) {
+   722→      // surfaced via toast in parent — keep dialog open
+   723→      console.error(err)
+   724→    } finally {
+   725→      setSubmitting(false)
+   726→    }
+   727→  }
+   728→
+   729→  return (
+   730→    <Dialog open={open} onOpenChange={onOpenChange}>
+   731→      <DialogContent className="sm:max-w-lg">
+   732→        <DialogHeader>
+   733→          <DialogTitle>Add a service</DialogTitle>
+   734→          <DialogDescription>
+   735→            Describe what you offer. Leads will be able to contact you about it.
+   736→          </DialogDescription>
+   737→        </DialogHeader>
+   738→
+   739→        <form onSubmit={handleSubmit} className="space-y-4">
+   740→          <div className="space-y-1.5">
+   741→            <Label htmlFor="svc-title">Title</Label>
+   742→            <Input
+   743→              id="svc-title"
+   744→              placeholder="e.g. Landing Page Build"
+   745→              value={title}
+   746→              onChange={(e) => setTitle(e.target.value)}
+   747→              aria-invalid={!!errors.title}
+   748→            />
+   749→            {errors.title && (
+   750→              <p className="text-xs text-destructive">{errors.title}</p>
+   751→            )}
+   752→          </div>
+   753→
+   754→          <div className="space-y-1.5">
+   755→            <Label htmlFor="svc-desc">Description</Label>
+   756→            <Textarea
+   757→              id="svc-desc"
+   758→              placeholder="What's included, turnaround, deliverables…"
+   759→              value={description}
+   760→              onChange={(e) => setDescription(e.target.value)}
+   761→              aria-invalid={!!errors.description}
+   762→            />
+   763→            {errors.description && (
+   764→              <p className="text-xs text-destructive">{errors.description}</p>
+   765→            )}
+   766→          </div>
+   767→
+   768→          <div className="grid grid-cols-2 gap-3">
+   769→            <div className="space-y-1.5">
+   770→              <Label htmlFor="svc-price">Price (CAD)</Label>
+   771→              <Input
+   772→                id="svc-price"
+   773→                type="number"
+   774→                min="0"
+   775→                step="0.01"
+   776→                placeholder="450"
+   777→                value={price}
+   778→                onChange={(e) => setPrice(e.target.value)}
+   779→                aria-invalid={!!errors.price}
+   780→              />
+   781→              {errors.price && (
+   782→                <p className="text-xs text-destructive">{errors.price}</p>
+   783→              )}
+   784→            </div>
+   785→            <div className="space-y-1.5">
+   786→              <Label htmlFor="svc-cat">Category</Label>
+   787→              <Input
+   788→                id="svc-cat"
+   789→                placeholder="e.g. Web Development"
+   790→                value={category}
+   791→                onChange={(e) => setCategory(e.target.value)}
+   792→                aria-invalid={!!errors.category}
+   793→              />
+   794→              {errors.category && (
+   795→                <p className="text-xs text-destructive">{errors.category}</p>
+   796→              )}
+   797→            </div>
+   798→          </div>
+   799→
+   800→          <div className="space-y-1.5">
+   801→            <Label>Icon (optional)</Label>
+   802→            <Select value={icon} onValueChange={setIcon}>
+   803→              <SelectTrigger className="w-full">
+   804→                <SelectValue />
+   805→              </SelectTrigger>
+   806→              <SelectContent>
+   807→                {ICON_WHITELIST.map((name) => (
+   808→                  <SelectItem key={name} value={name}>
+   809→                    <span className="flex items-center gap-2">
+   810→                      <ServiceIcon name={name} className="h-4 w-4" />
+   811→                      {name}
+   812→                    </span>
+   813→                  </SelectItem>
+   814→                ))}
+   815→              </SelectContent>
+   816→            </Select>
+   817→          </div>
+   818→
+   819→          <DialogFooter>
+   820→            <Button
+   821→              type="button"
+   822→              variant="outline"
+   823→              onClick={() => onOpenChange(false)}
+   824→              disabled={submitting}
+   825→            >
+   826→              Cancel
+   827→            </Button>
+   828→            <Button
+   829→              type="submit"
+   830→              disabled={submitting}
+   831→              className="bg-emerald-600 text-white hover:bg-emerald-600/90"
+   832→            >
+   833→              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+   834→              Publish service
+   835→            </Button>
+   836→          </DialogFooter>
+   837→        </form>
+   838→      </DialogContent>
+   839→    </Dialog>
+   840→  )
+   841→}
+   842→
+   843→function HireDialog({
+   844→  service,
+   845→  services,
+   846→  onOpenChange,
+   847→  onSubmit,
+   848→}: {
+   849→  service: Service | null
+   850→  services: Service[]
+   851→  onOpenChange: (open: boolean) => void
+   852→  onSubmit: (input: {
+   853→    name: string
+   854→    email: string
+   855→    message: string
+   856→    serviceId: string | null
+   857→  }) => Promise<void>
+   858→}) {
+   859→  const open = service !== null
+   860→  const [name, setName] = useState('')
+   861→  const [email, setEmail] = useState('')
+   862→  const [message, setMessage] = useState('')
+   863→  const [selectedServiceId, setSelectedServiceId] = useState<string>('')
+   864→  const [errors, setErrors] = useState<Record<string, string>>({})
+   865→  const [submitting, setSubmitting] = useState(false)
+   866→
+   867→  // Reset & pre-fill whenever the dialog opens for a service
+   868→  const prevOpen = useRef(false)
+   869→  useEffect(() => {
+   870→    if (open && !prevOpen.current && service) {
+   871→      setName('')
+   872→      setEmail('')
+   873→      setMessage('')
+   874→      setSelectedServiceId(service.id)
+   875→      setErrors({})
+   876→    }
+   877→    prevOpen.current = open
+   878→  }, [open, service])
+   879→
+   880→  function validate(): boolean {
+   881→    const e: Record<string, string> = {}
+   882→    if (!name.trim()) e.name = 'Name is required'
+   883→    if (!email.trim() || !isEmail(email.trim())) {
+   884→      e.email = 'Enter a valid email'
+   885→    }
+   886→    if (!message.trim()) e.message = 'Message is required'
+   887→    setErrors(e)
+   888→    return Object.keys(e).length === 0
+   889→  }
+   890→
+   891→  async function handleSubmit(ev: React.FormEvent) {
+   892→    ev.preventDefault()
+   893→    if (!validate()) return
+   894→    setSubmitting(true)
+   895→    try {
+   896→      await onSubmit({
+   897→        name: name.trim(),
+   898→        email: email.trim(),
+   899→        message: message.trim(),
+   900→        serviceId: selectedServiceId || null,
+   901→      })
+   902→      onOpenChange(false)
+   903→    } catch (err) {
+   904→      console.error(err)
+   905→    } finally {
+   906→      setSubmitting(false)
+   907→    }
+   908→  }
+   909→
+   910→  return (
+   911→    <Dialog open={open} onOpenChange={onOpenChange}>
+   912→      <DialogContent className="sm:max-w-lg">
+   913→        <DialogHeader>
+   914→          <DialogTitle>Start a project</DialogTitle>
+   915→          <DialogDescription>
+   916→            Fill in your details and the freelancer will get back to you.
+   917→          </DialogDescription>
+   918→        </DialogHeader>
+   919→
+   920→        <form onSubmit={handleSubmit} className="space-y-4">
+   921→          <div className="space-y-1.5">
+   922→            <Label htmlFor="lead-name">Name</Label>
+   923→            <Input
+   924→              id="lead-name"
+   925→              placeholder="Your name"
+   926→              value={name}
+   927→              onChange={(e) => setName(e.target.value)}
+   928→              aria-invalid={!!errors.name}
+   929→            />
+   930→            {errors.name && (
+   931→              <p className="text-xs text-destructive">{errors.name}</p>
+   932→            )}
+   933→          </div>
+   934→
+   935→          <div className="space-y-1.5">
+   936→            <Label htmlFor="lead-email">Email</Label>
+   937→            <Input
+   938→              id="lead-email"
+   939→              type="email"
+   940→              placeholder="you@example.com"
+   941→              value={email}
+   942→              onChange={(e) => setEmail(e.target.value)}
+   943→              aria-invalid={!!errors.email}
+   944→            />
+   945→            {errors.email && (
+   946→              <p className="text-xs text-destructive">{errors.email}</p>
+   947→            )}
+   948→          </div>
+   949→
+   950→          <div className="space-y-1.5">
+   951→            <Label>Service</Label>
+   952→            <Select
+   953→              value={selectedServiceId}
+   954→              onValueChange={setSelectedServiceId}
+   955→            >
+   956→              <SelectTrigger className="w-full">
+   957→                <SelectValue placeholder="Select a service" />
+   958→              </SelectTrigger>
+   959→              <SelectContent>
+   960→                {services.map((s) => (
+   961→                  <SelectItem key={s.id} value={s.id}>
+   962→                    {s.title} · {formatCurrency(s.price)}
+   963→                  </SelectItem>
+   964→                ))}
+   965→              </SelectContent>
+   966→            </Select>
+   967→          </div>
+   968→
+   969→          <div className="space-y-1.5">
+   970→            <Label htmlFor="lead-msg">Message</Label>
+   971→            <Textarea
+   972→              id="lead-msg"
+   973→              placeholder="Tell the freelancer what you need…"
+   974→              value={message}
+   975→              onChange={(e) => setMessage(e.target.value)}
+   976→              aria-invalid={!!errors.message}
+   977→            />
+   978→            {errors.message && (
+   979→              <p className="text-xs text-destructive">{errors.message}</p>
+   980→            )}
+   981→          </div>
+   982→
+   983→          <DialogFooter>
+   984→            <Button
+   985→              type="button"
+   986→              variant="outline"
+   987→              onClick={() => onOpenChange(false)}
+   988→              disabled={submitting}
+   989→            >
+   990→              Cancel
+   991→            </Button>
+   992→            <Button
+   993→              type="submit"
+   994→              disabled={submitting}
+   995→              className="bg-emerald-600 text-white hover:bg-emerald-600/90"
+   996→            >
+   997→              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+   998→              Send lead
+   999→            </Button>
+  1000→          </DialogFooter>
+  1001→        </form>
+  1002→      </DialogContent>
+  1003→    </Dialog>
+  1004→  )
+  1005→}
+  1006→

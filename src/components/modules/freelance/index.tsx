@@ -16,6 +16,11 @@ import {
   AlertCircle,
   Send,
   Sparkles,
+  Wand2,
+  Copy,
+  Check,
+  ExternalLink,
+  RotateCcw,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -134,6 +139,7 @@ export default function FreelanceModule() {
   // Dialog state
   const [hireService, setHireService] = useState<Service | null>(null)
   const [addServiceOpen, setAddServiceOpen] = useState(false)
+  const [replyLead, setReplyLead] = useState<Lead | null>(null)
 
   const fetchServices = useCallback(async () => {
     setLoadingServices(true)
@@ -390,6 +396,7 @@ export default function FreelanceModule() {
             onRetry={fetchLeads}
             onStatusChange={handleStatusChange}
             onDelete={handleDeleteLead}
+            onDraftReply={setReplyLead}
           />
         </div>
       </div>
@@ -409,6 +416,21 @@ export default function FreelanceModule() {
           if (!open) setHireService(null)
         }}
         onSubmit={handleCreateLead}
+      />
+
+      {/* AI reply draft dialog */}
+      <ReplyDialog
+        lead={replyLead}
+        onOpenChange={(open) => {
+          if (!open) setReplyLead(null)
+        }}
+        onReplied={(leadId) => {
+          // Auto-advance a 'new' lead to 'contacted' once a reply is drafted
+          const target = leads.find((l) => l.id === leadId)
+          if (target && target.status === 'new') {
+            handleStatusChange(leadId, 'contacted')
+          }
+        }}
       />
     </div>
   )
@@ -480,6 +502,7 @@ function LeadsInbox({
   onRetry,
   onStatusChange,
   onDelete,
+  onDraftReply,
 }: {
   leads: Lead[]
   loading: boolean
@@ -487,6 +510,7 @@ function LeadsInbox({
   onRetry: () => void
   onStatusChange: (id: string, status: LeadStatus) => void
   onDelete: (id: string) => void
+  onDraftReply: (lead: Lead) => void
 }) {
   const [pendingDelete, setPendingDelete] = useState<Lead | null>(null)
 
@@ -587,7 +611,7 @@ function LeadsInbox({
                         onStatusChange(lead.id, v as LeadStatus)
                       }
                     >
-                      <SelectTrigger size="sm" className="h-8 w-36">
+                      <SelectTrigger size="sm" className="h-8 w-28">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -599,15 +623,27 @@ function LeadsInbox({
                       </SelectContent>
                     </Select>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => setPendingDelete(lead)}
-                      aria-label="Delete lead"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1.5 px-2 text-emerald-700 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-300"
+                        onClick={() => onDraftReply(lead)}
+                        aria-label={`Draft reply to ${lead.name}`}
+                      >
+                        <Wand2 className="h-4 w-4" />
+                        <span className="hidden sm:inline">Reply</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => setPendingDelete(lead)}
+                        aria-label="Delete lead"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </li>
               ))}
@@ -646,6 +682,281 @@ function LeadsInbox({
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+  )
+}
+
+// ---------------- Reply Dialog (AI-assisted) ----------------
+
+function ReplyDialog({
+  lead,
+  onOpenChange,
+  onReplied,
+}: {
+  lead: Lead | null
+  onOpenChange: (open: boolean) => void
+  onReplied: (leadId: string) => void
+}) {
+  const { toast } = useToast()
+  const [draft, setDraft] = useState('')
+  const [subject, setSubject] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [hasDrafted, setHasDrafted] = useState(false)
+
+  // Generate the draft whenever a new lead is opened
+  useEffect(() => {
+    if (!lead) {
+      setDraft('')
+      setSubject('')
+      setError(null)
+      setWarning(null)
+      setHasDrafted(false)
+      return
+    }
+    let alive = true
+    setLoading(true)
+    setError(null)
+    setWarning(null)
+    setHasDrafted(false)
+    fetch(`/api/freelance/leads/${lead.id}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tone: 'warm and professional' }),
+    })
+      .then(async (r) => {
+        const data = await r.json()
+        if (!r.ok) throw new Error(data?.error ?? 'Failed to draft reply')
+        if (!alive) return
+        setDraft(data.draft)
+        setSubject(data.subject)
+        if (data.warning) setWarning(data.warning)
+        setHasDrafted(true)
+        onReplied(lead.id)
+      })
+      .catch((e) => {
+        if (!alive) return
+        setError(e instanceof Error ? e.message : 'Failed to draft reply')
+      })
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [lead?.id])
+
+  async function handleRegenerate() {
+    if (!lead) return
+    setLoading(true)
+    setError(null)
+    setWarning(null)
+    try {
+      const r = await fetch(`/api/freelance/leads/${lead.id}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tone: 'concise and friendly' }),
+      })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data?.error ?? 'Failed to regenerate')
+      setDraft(data.draft)
+      if (data.warning) setWarning(data.warning)
+      toast({ title: 'New draft generated', description: 'Take a look below.' })
+    } catch (e) {
+      toast({
+        title: 'Could not regenerate',
+        description: e instanceof Error ? e.message : 'Try again in a moment.',
+        variant: 'destructive',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(draft)
+      setCopied(true)
+      toast({ title: 'Copied to clipboard' })
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast({
+        title: 'Copy failed',
+        description: 'Select the text and copy manually.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // mailto: link opens the user's own email client with everything pre-filled.
+  // The user reviews and clicks send themselves — we never send anything.
+  const mailtoHref = lead
+    ? `mailto:${encodeURIComponent(lead.email)}?subject=${encodeURIComponent(
+        subject
+      )}&body=${encodeURIComponent(draft)}`
+    : '#'
+
+  return (
+    <Dialog
+      open={!!lead}
+      onOpenChange={(open) => {
+        if (!loading) onOpenChange(open)
+      }}
+    >
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-lg"
+              style={{ backgroundColor: '#10b9811a', color: '#10b981' }}
+            >
+              <Wand2 className="h-4 w-4" />
+            </div>
+            <DialogTitle>Draft a reply</DialogTitle>
+          </div>
+          <DialogDescription>
+            {lead
+              ? `AI-drafted reply to ${lead.name} about ${
+                  lead.service?.title ?? 'their enquiry'
+                }. Edit it, then open it in your email client to send.`
+              : ''}
+          </DialogDescription>
+        </DialogHeader>
+
+        {lead && (
+          <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+            <p className="text-xs font-medium text-muted-foreground">
+              Their message:
+            </p>
+            <p className="mt-1 text-foreground/90">&ldquo;{lead.message}&rdquo;</p>
+          </div>
+        )}
+
+        {error ? (
+          <Alert variant="destructive">
+            <AlertCircle />
+            <AlertTitle>Couldn&apos;t draft a reply</AlertTitle>
+            <AlertDescription>
+              <p>{error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => {
+                  if (lead) {
+                    // Re-trigger by toggling state via onOpenChange trick
+                    const id = lead.id
+                    onOpenChange(false)
+                    setTimeout(() => {
+                      // reopen — parent controls lead state
+                    }, 50)
+                    void id
+                  }
+                }}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Close and try again
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <div className="space-y-3">
+            {warning && (
+              <div className="rounded-md border border-amber-300/60 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                {warning}
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="reply-subject" className="text-xs">
+                Subject
+              </Label>
+              <Input
+                id="reply-subject"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="reply-body" className="text-xs">
+                  Email body
+                </Label>
+                <span className="text-xs text-muted-foreground">
+                  {draft.trim().split(/\s+/).filter(Boolean).length} words
+                </span>
+              </div>
+              <Textarea
+                id="reply-body"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                disabled={loading}
+                className="min-h-[280px] font-sans text-sm leading-relaxed"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopy}
+                disabled={loading || !draft}
+              >
+                {copied ? (
+                  <Check className="h-4 w-4 text-emerald-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={loading}
+              >
+                <RotateCcw
+                  className={cn('h-4 w-4', loading && 'animate-spin')}
+                />
+                Regenerate
+              </Button>
+              <div className="ml-auto flex items-center gap-2">
+                {loading && (
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Drafting…
+                  </span>
+                )}
+                <Button
+                  asChild
+                  size="sm"
+                  className="bg-emerald-600 text-white hover:bg-emerald-600/90"
+                >
+                  <a href={mailtoHref} onClick={() =>
+                    toast({
+                      title: 'Opening your email app',
+                      description: 'Review the message, then hit send.',
+                    })
+                  }>
+                    <ExternalLink className="h-4 w-4" />
+                    Open in email
+                  </a>
+                </Button>
+              </div>
+            </div>
+
+            {hasDrafted && !loading && (
+              <p className="text-xs text-muted-foreground">
+                Tip: personalize it — mention a detail from their message, add
+                your portfolio link, and replace{' '}
+                <span className="font-mono">[Your name]</span> before sending.
+              </p>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 

@@ -239,3 +239,24 @@ Work Log:
 Stage Summary:
 - Site is fully interactive and runnable. Every primary user flow verified end-to-end in the browser with successful API calls.
 - No outstanding defects. The app is complete.
+
+---
+Task ID: 5
+Agent: main (orchestrator)
+Task: AI reply assistant for freelance leads
+
+Work Log:
+- Removed the test lead (client@test.com) created during Task 4 verification; 3 real leads remain.
+- Loaded the LLM skill (z-ai-web-dev-sdk, server-side only).
+- Created API route `src/app/api/freelance/leads/[id]/reply/route.ts` — POST fetches the lead + its service, builds a system+user prompt, calls ZAI.chat.completions.create, returns { draft, subject, to, leadName }. Includes a graceful fallback template if the model is unavailable.
+- Prompt engineering: warm/professional tone, 120-180 words, references the lead's specific message + service details + price, asks ONE scoping question, ends with [Your name] placeholder, no invented contact info.
+- Added `ReplyDialog` component to the freelance module: auto-generates draft on open, editable subject + body, word count, Copy button, Regenerate button (different tone), and "Open in email" (mailto: link that opens the user's own email client pre-filled — user sends it themselves).
+- Wired a "Reply" button (Wand2 icon, emerald accent) into each lead card in the LeadsInbox.
+- Auto-advances a lead from "new" to "contacted" once a reply is drafted (calls existing handleStatusChange).
+- Verified end-to-end: Priya's lead → AI drafted a personalized reply mentioning her pottery studio + 2-week timeline + $450 price → mailto link correctly pre-filled → lead auto-advanced to "contacted".
+- Lint: 0 errors, 0 warnings.
+
+Stage Summary:
+- 3 real leads ready to reply to: Thomas bowyer-marche, Priya Sharma, Marcus Lee.
+- User can now draft a personalized AI reply per lead with one click, edit it, and open it in their email client to send — they stay in control of actually sending.
+- The app does NOT send emails itself (no email integration, and we don't impersonate the user to third parties).
