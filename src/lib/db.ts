@@ -9,10 +9,12 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient(): PrismaClient {
   const url = process.env.DATABASE_URL
 
+  // No URL = local dev fallback (uses local SQLite via DATABASE_URL in .env)
   if (!url) {
     return new PrismaClient({ log: ['error', 'warn'] })
   }
 
+  // Turso/libsql (production on Vercel)
   if (url.startsWith('libsql://')) {
     const authToken = process.env.DATABASE_AUTH_TOKEN
     const libsql = createClient({ url, authToken })
@@ -20,23 +22,10 @@ function createPrismaClient(): PrismaClient {
     return new PrismaClient({ adapter, log: ['error', 'warn'] })
   }
 
+  // Local SQLite file
   return new PrismaClient({ log: ['error', 'warn'] })
 }
 
-let _client: PrismaClient | null = null
-function getClient(): PrismaClient {
-  if (!_client) {
-    _client = createPrismaClient()
-  }
-  return _client
-}
+export const db = globalForPrisma.prisma ?? createPrismaClient()
 
-export const db = new Proxy({} as PrismaClient, {
-  get(_target, prop) {
-    const client = getClient()
-    const value = (client as unknown as Record<string | symbol, unknown>)[prop]
-    return typeof value === 'function' ? value.bind(client) : value
-  },
-}) as PrismaClient
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = _client ?? undefined
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
