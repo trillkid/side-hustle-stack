@@ -36,7 +36,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 import {
   Sheet,
   SheetContent,
@@ -95,17 +94,6 @@ function ProductImage({ src, name }: { src: string; name: string }) {
       )}
     </AspectRatio>
   )
-}
-
-function formatCardNumber(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 16)
-  return digits.replace(/(.{4})/g, '$1 ').trim()
-}
-
-function formatExpiry(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 4)
-  if (digits.length <= 2) return digits
-  return `${digits.slice(0, 2)}/${digits.slice(2)}`
 }
 
 // ---------- main component ----------
@@ -778,18 +766,12 @@ function CheckoutDialog({
   const { toast } = useToast()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [card, setCard] = useState('')
-  const [expiry, setExpiry] = useState('')
-  const [cvc, setCvc] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [success, setSuccess] = useState<{ total: number } | null>(null)
+  const [success, setSuccess] = useState<{ total: number; mock?: boolean } | null>(null)
 
   const reset = () => {
     setName('')
     setEmail('')
-    setCard('')
-    setExpiry('')
-    setCvc('')
     setSuccess(null)
   }
 
@@ -804,18 +786,10 @@ function CheckoutDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const cardDigits = card.replace(/\s/g, '')
-    if (
-      !name.trim() ||
-      !/^\S+@\S+\.\S+$/.test(email) ||
-      cardDigits.length !== 16 ||
-      expiry.length !== 5 ||
-      cvc.length < 3
-    ) {
+    if (!name.trim() || !/^\S+@\S+\.\S+$/.test(email)) {
       toast({
         title: 'Check your details',
-        description:
-          'We need a valid name, email, 16-digit card number, expiry (MM/YY) and CVC.',
+        description: 'We need a valid name and email.',
         variant: 'destructive',
       })
       return
@@ -823,7 +797,10 @@ function CheckoutDialog({
 
     setSubmitting(true)
     try {
-      const res = await fetch('/api/store/orders', {
+      // Call the unified checkout endpoint. If Stripe is configured, it
+      // returns { url } to redirect to. Otherwise it returns { mock: true }
+      // and creates a mock order.
+      const res = await fetch('/api/store/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -831,21 +808,36 @@ function CheckoutDialog({
           email,
           items: items.map((i) => ({
             productId: i.productId,
-            name: i.name,
-            price: i.price,
             qty: i.qty,
           })),
         }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err?.error || 'Failed to place order')
+        throw new Error(err?.error || 'Failed to start checkout')
       }
       const data = await res.json()
-      setSuccess({ total: data.order.total })
+
+      if (data.url) {
+        // Real Stripe — redirect to Stripe-hosted checkout
+        toast({
+          title: 'Redirecting to Stripe…',
+          description: 'Complete your card payment on the secure Stripe page.',
+        })
+        window.location.href = data.url
+        return
+      }
+
+      // Mock mode — order was created with status 'mock'
+      setSuccess({
+        total: items.reduce((s, i) => s + i.price * i.qty, 0),
+        mock: true,
+      })
       toast({
-        title: 'Order placed!',
-        description: `Confirmation sent to ${email}.`,
+        title: 'Mock order placed',
+        description:
+          'Stripe is not connected yet, so no real money moved. Connect Stripe in Settings to accept real payments.',
+        variant: 'default',
       })
       onSuccess()
     } catch (err) {
@@ -867,17 +859,38 @@ function CheckoutDialog({
       <DialogContent>
         {success ? (
           <div className="flex flex-col items-center gap-3 py-4 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15">
-              <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+            <div
+              className={`flex h-14 w-14 items-center justify-center rounded-full ${
+                success.mock ? 'bg-amber-500/15' : 'bg-emerald-500/15'
+              }`}
+            >
+              <CheckCircle2
+                className={`h-8 w-8 ${
+                  success.mock ? 'text-amber-600' : 'text-emerald-600'
+                }`}
+              />
             </div>
-            <DialogTitle className="text-xl">Order placed!</DialogTitle>
+            <DialogTitle className="text-xl">
+              {success.mock ? 'Mock order placed' : 'Order placed!'}
+            </DialogTitle>
             <DialogDescription>
-              Your payment of{' '}
-              <span className="font-semibold text-foreground">
-                {formatCurrency(success.total)}
-              </span>{' '}
-              was processed successfully. A confirmation has been sent to your
-              email.
+              {success.mock ? (
+                <>
+                  This was a <strong>mock</strong> order for{' '}
+                  {formatCurrency(success.total)} — no real money moved. Connect
+                  Stripe in <strong>Settings</strong> to accept real card
+                  payments.
+                </>
+              ) : (
+                <>
+                  Your payment of{' '}
+                  <span className="font-semibold text-foreground">
+                    {formatCurrency(success.total)}
+                  </span>{' '}
+                  was processed successfully. A confirmation has been sent to
+                  your email.
+                </>
+              )}
             </DialogDescription>
             <Button
               className="mt-2 bg-amber-500 text-white hover:bg-amber-600"
@@ -891,8 +904,9 @@ function CheckoutDialog({
             <DialogHeader>
               <DialogTitle>Checkout</DialogTitle>
               <DialogDescription>
-                Mock payment — no real card is charged. The order will be saved
-                with status &ldquo;paid&rdquo;.
+                Enter your details. If Stripe is connected, you&apos;ll be
+                redirected to a secure Stripe page to pay. Otherwise this will
+                be a mock order.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -918,47 +932,6 @@ function CheckoutDialog({
                   disabled={submitting}
                   required
                 />
-              </div>
-              <Separator />
-              <div className="space-y-2">
-                <Label htmlFor="c-card">Card number</Label>
-                <Input
-                  id="c-card"
-                  inputMode="numeric"
-                  value={card}
-                  onChange={(e) => setCard(formatCardNumber(e.target.value))}
-                  placeholder="4242 4242 4242 4242"
-                  disabled={submitting}
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="c-exp">Expiry (MM/YY)</Label>
-                  <Input
-                    id="c-exp"
-                    inputMode="numeric"
-                    value={expiry}
-                    onChange={(e) => setExpiry(formatExpiry(e.target.value))}
-                    placeholder="12/28"
-                    disabled={submitting}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="c-cvc">CVC</Label>
-                  <Input
-                    id="c-cvc"
-                    inputMode="numeric"
-                    value={cvc}
-                    onChange={(e) =>
-                      setCvc(e.target.value.replace(/\D/g, '').slice(0, 4))
-                    }
-                    placeholder="123"
-                    disabled={submitting}
-                    required
-                  />
-                </div>
               </div>
 
               <div className="rounded-lg bg-muted/60 p-3 text-sm">

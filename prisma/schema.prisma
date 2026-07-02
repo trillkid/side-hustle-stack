@@ -9,6 +9,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ---------- App-wide settings (single row, id = "singleton") ----------
+model AppSettings {
+  id                 String   @id @default("singleton")
+  stripePublishableKey String?
+  stripeSecretKey    String?
+  amazonAffiliateTag String?
+  notificationEmail  String?
+  siteName           String   @default("Side Hustle Stack")
+  updatedAt          DateTime @updatedAt
+}
+
 // ---------- Module 1: Freelance Hub ----------
 model FreelanceService {
   id          String   @id @default(cuid())
@@ -45,13 +56,14 @@ model Product {
 }
 
 model StoreOrder {
-  id           String   @id @default(cuid())
-  customerName String
-  email        String
-  total        Float
-  itemsJson    String // JSON-encoded cart items
-  status       String   @default("paid")
-  createdAt    DateTime @default(now())
+  id              String   @id @default(cuid())
+  customerName    String
+  email           String
+  total           Float
+  itemsJson       String // JSON-encoded cart items
+  status          String   @default("paid") // paid | pending | refunded | mock
+  stripeSessionId String?
+  createdAt       DateTime @default(now())
 }
 
 // ---------- Module 3: Affiliate Reviews ----------

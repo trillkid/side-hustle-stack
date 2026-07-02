@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   Briefcase,
@@ -8,8 +8,10 @@ import {
   PenTool,
   Link2,
   BriefcaseBusiness,
+  Settings as SettingsIcon,
   Github,
   Heart,
+  CheckCircle2,
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
@@ -20,6 +22,7 @@ import StoreModule from '@/components/modules/store'
 import AffiliateModule from '@/components/modules/affiliate'
 import LinkForgeModule from '@/components/modules/linkforge'
 import JobsModule from '@/components/modules/jobs'
+import SettingsModule from '@/components/modules/settings'
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -28,12 +31,38 @@ const TABS = [
   { id: 'affiliate', label: 'Affiliate', icon: PenTool },
   { id: 'linkforge', label: 'LinkForge', icon: Link2 },
   { id: 'jobs', label: 'Jobs & Portfolio', icon: BriefcaseBusiness },
+  { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
 
 export default function Home() {
   const [tab, setTab] = useState<TabId>('overview')
+  const [stripeSuccess, setStripeSuccess] = useState<string | null>(null)
+
+  // Handle Stripe Checkout success redirect — confirm the order, clean the URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const sessionId = params.get('session_id')
+    const success = params.get('stripe_success')
+    const cancel = params.get('stripe_cancel')
+    if (success && sessionId) {
+      // Confirm the order server-side, then show the success banner
+      fetch(`/api/store/confirm-order?session_id=${encodeURIComponent(sessionId)}`)
+        .then((r) => r.json())
+        .catch(() => ({}))
+        .then((data) => {
+          if (data?.order || data?.alreadyExisted) {
+            setStripeSuccess(sessionId)
+          }
+        })
+        .finally(() => {
+          window.history.replaceState({}, '', '/')
+        })
+    } else if (cancel) {
+      window.history.replaceState({}, '', '/')
+    }
+  }, [])
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -96,12 +125,32 @@ export default function Home() {
       </header>
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        {stripeSuccess && (
+          <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm text-emerald-800 dark:text-emerald-200">
+            <CheckCircle2 className="h-5 w-5 shrink-0" />
+            <div className="flex-1">
+              <p className="font-semibold">Payment successful!</p>
+              <p className="text-xs">
+                Your order has been confirmed and recorded. Check the Overview
+                tab to see your real Stripe balance update.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setStripeSuccess(null)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        )}
         {tab === 'overview' && <Overview />}
         {tab === 'freelance' && <FreelanceModule />}
         {tab === 'store' && <StoreModule />}
         {tab === 'affiliate' && <AffiliateModule />}
         {tab === 'linkforge' && <LinkForgeModule />}
         {tab === 'jobs' && <JobsModule />}
+        {tab === 'settings' && <SettingsModule />}
       </main>
 
       <footer className="mt-auto border-t bg-background">

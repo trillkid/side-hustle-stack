@@ -316,3 +316,36 @@ Work Log:
 Stage Summary:
 - The Overview can no longer be mistaken for a wallet/balance. Real = $0 is front and center.
 - Took responsibility for the earlier misleading design rather than blaming the user for misreading.
+
+---
+Task ID: 9
+Agent: main (orchestrator)
+Task: Make the money REAL — Stripe integration, affiliate injection, real earnings dashboard, Settings panel
+
+Work Log:
+- Explained the honest situation to the user upfront and told them to sign up for Stripe + Amazon Associates in parallel.
+- Added AppSettings model to Prisma (singleton row: stripePublishableKey, stripeSecretKey, amazonAffiliateTag, notificationEmail, siteName). Added stripeSessionId to StoreOrder. Pushed schema.
+- Installed `stripe@22.3.0`.
+- Created `src/lib/settings.ts` (getSettings/updateSettings/maskSecret/withAffiliateTag) and `src/lib/stripe.ts` (getStripe SDK helper).
+- Built API routes:
+  - `GET/POST /api/settings` — returns masked secrets + connection status; POST saves keys (never sends secret key back to client; only updates if user types a new sk_ key).
+  - `GET /api/earnings/real` — calls Stripe Balance API, returns { configured, available, pending, total } or { configured: false }.
+  - `POST /api/store/checkout` — unified endpoint: if Stripe configured, creates a Checkout Session and returns { url }; otherwise creates a mock order with status 'mock'. Prices always re-fetched from DB server-side (never trusts client prices).
+  - `GET /api/store/confirm-order` — retrieves a Stripe session by id, verifies payment_status === 'paid', creates the StoreOrder idempotently.
+  - `POST /api/store/webhook` — Stripe webhook handler (for production use; needs STRIPE_WEBHOOK_SECRET env var).
+  - Updated `POST /api/affiliate/clicks` — now injects the Amazon affiliate tag into the returned URL via withAffiliateTag.
+- Built Settings UI module (`src/components/modules/settings/index.tsx`) with: real Stripe balance card (live), Stripe key fields (publishable + secret with show/hide toggle), Amazon tag field, general settings, sticky save bar, connection status badges, signup links to Stripe + Amazon Associates.
+- Rewrote Store checkout dialog: removed fake card fields (Stripe handles cards on its hosted page), calls /api/store/checkout, redirects to Stripe URL when configured, shows honest mock-mode success message otherwise.
+- Updated hub `src/app/page.tsx`: added Settings tab, handles Stripe success redirect (confirms order, shows success banner, cleans URL).
+- Updated Overview: the "Real, withdrawable balance" card now fetches /api/earnings/real and shows the LIVE Stripe available/pending balance when configured, or "Stripe not connected — go to Settings" when not. Includes a refresh button and a direct link to Stripe payouts.
+- Had to kill + restart the dev server after `db:generate` because the old Prisma client was cached in the global singleton.
+- Fixed 2 React 19 lint errors (setState-in-effect) by moving setState calls into async callbacks.
+- Verified end-to-end in browser: Settings tab renders with all fields; Overview shows $0.00 real balance + "Stripe not connected"; Store mock checkout flow works (POST /api/store/checkout 200 → "Mock order placed" message). Lint clean.
+
+Stage Summary:
+- The full real-money plumbing is now in place. The moment the user pastes Stripe keys + Amazon tag into Settings, everything flips from demo to real:
+  - Store → real Stripe Checkout → real card payments → money in their Stripe account → withdraw from Stripe dashboard.
+  - Affiliate clicks → URLs tagged with their Amazon Associates ID → Amazon credits them for purchases.
+  - Overview → shows live Stripe available + pending balance.
+- Nothing is withdrawable from THIS app — withdrawals happen in the user's own Stripe dashboard (link provided). The app never holds money.
+- Still waiting on the user to: (1) create a Stripe account, (2) sign up for Amazon Associates, (3) paste keys into Settings.

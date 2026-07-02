@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getSettings, withAffiliateTag } from '@/lib/settings'
 
 type ClickBody = { articleId?: string }
 
@@ -31,7 +32,15 @@ export async function POST(req: Request) {
       data: { articleId: article.id },
     })
 
-    return NextResponse.json({ url: article.affiliateUrl })
+    // If the user has an Amazon Associates tag configured, inject it so
+    // the click is attributed to their account and they earn commission.
+    const settings = await getSettings()
+    const finalUrl = withAffiliateTag(
+      article.affiliateUrl,
+      settings.amazonAffiliateTag
+    )
+
+    return NextResponse.json({ url: finalUrl })
   } catch (err) {
     console.error('[affiliate/clicks POST]', err)
     return NextResponse.json(

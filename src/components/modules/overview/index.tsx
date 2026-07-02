@@ -12,10 +12,13 @@ import {
   FileText,
   Trophy,
   DollarSign,
+  RefreshCw,
+  ExternalLink,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/format'
 
 type Overview = {
@@ -83,9 +86,28 @@ function StatCard({
   )
 }
 
+type RealEarnings = {
+  configured: boolean
+  available: number | null
+  pending: number | null
+  total: number | null
+  error?: string
+  message?: string
+}
+
 export default function Overview() {
   const [data, setData] = useState<Overview | null>(null)
   const [loading, setLoading] = useState(true)
+  const [real, setReal] = useState<RealEarnings | null>(null)
+  const [realLoading, setRealLoading] = useState(true)
+
+  const fetchReal = () => {
+    setRealLoading(true)
+    fetch('/api/earnings/real', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => setReal(d as RealEarnings))
+      .finally(() => setRealLoading(false))
+  }
 
   useEffect(() => {
     let alive = true
@@ -93,6 +115,17 @@ export default function Overview() {
       .then((r) => r.json())
       .then((d) => alive && setData(d))
       .finally(() => alive && setLoading(false))
+
+    // Fetch real Stripe balance. realLoading already defaults to true,
+    // so no synchronous setState is needed here.
+    fetch('/api/earnings/real', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return
+        setReal(d as RealEarnings)
+      })
+      .finally(() => alive && setRealLoading(false))
+
     return () => {
       alive = false
     }
@@ -109,7 +142,6 @@ export default function Overview() {
   }
 
   // Only store revenue is "real" — and even that is mock until Stripe is connected.
-  const realWithdrawable = 0
   const totalEstimated = data.earnings.total
 
   const earningsBars = [
@@ -142,29 +174,83 @@ export default function Overview() {
 
   return (
     <div className="space-y-6">
-      {/* REAL balance card — unmissable honesty */}
+      {/* REAL balance card — pulls live from Stripe when configured */}
       <Card className="border-2 border-emerald-500/40 bg-emerald-500/5">
         <CardContent className="p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                Real, withdrawable balance
-              </p>
-              <p className="mt-1 text-4xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300">
-                {formatCurrency(realWithdrawable)}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                No payment processor is connected yet. This is $0 until you
-                connect Stripe and real customers pay.
-              </p>
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                <p className="text-sm font-medium">
+                  Real, withdrawable balance (Stripe)
+                </p>
+                {real?.configured && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={fetchReal}
+                    disabled={realLoading}
+                    aria-label="Refresh balance"
+                  >
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 ${realLoading ? 'animate-spin' : ''}`}
+                    />
+                  </Button>
+                )}
+              </div>
+              {realLoading ? (
+                <Skeleton className="mt-2 h-10 w-40" />
+              ) : !real?.configured ? (
+                <>
+                  <p className="mt-1 text-4xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300">
+                    {formatCurrency(0)}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Stripe is not connected yet. Go to{' '}
+                    <strong>Settings</strong> to add your Stripe keys — then
+                    this shows your <em>actual</em> balance, live.
+                  </p>
+                </>
+              ) : real.error ? (
+                <>
+                  <p className="mt-1 text-2xl font-bold tracking-tight text-amber-600">
+                    Couldn&apos;t load
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {real.error}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-1 text-4xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300">
+                    {formatCurrency(real.available ?? 0)}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Available to withdraw now.{' '}
+                    {real.pending && real.pending > 0
+                      ? `${formatCurrency(real.pending)} pending. `
+                      : ''}
+                    Withdraw from your{' '}
+                    <a
+                      href="https://dashboard.stripe.com/payouts"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium underline inline-flex items-center gap-0.5"
+                    >
+                      Stripe dashboard <ExternalLink className="h-3 w-3" />
+                    </a>
+                    .
+                  </p>
+                </>
+              )}
             </div>
             <div className="rounded-lg border border-emerald-500/30 bg-background/60 p-4 text-sm">
-              <p className="font-medium">How to make this number real:</p>
+              <p className="font-medium">How money actually reaches you:</p>
               <ul className="mt-2 space-y-1 text-muted-foreground">
-                <li>• Connect Stripe to the Store</li>
-                <li>• Add real affiliate links (Amazon Associates)</li>
-                <li>• Share your freelance link with real people</li>
-                <li>• Drive real traffic to your content</li>
+                <li>• Connect Stripe → real card payments land here</li>
+                <li>• Add Amazon tag → affiliate commission from Amazon</li>
+                <li>• Share freelance link → real clients pay invoices</li>
+                <li>• Withdraw straight from Stripe to your bank</li>
               </ul>
             </div>
           </div>
