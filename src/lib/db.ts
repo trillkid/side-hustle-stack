@@ -9,9 +9,11 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient(): PrismaClient {
   const url = process.env.DATABASE_URL
 
-  // If the URL is a libsql/Turso URL (production on Vercel), use the adapter.
-  // Otherwise (local dev with SQLite file), use the standard Prisma client.
-  if (url && url.startsWith('libsql://')) {
+  if (!url) {
+    return new PrismaClient({ log: ['error', 'warn'] })
+  }
+
+  if (url.startsWith('libsql://')) {
     const authToken = process.env.DATABASE_AUTH_TOKEN
     const libsql = createClient({ url, authToken })
     const adapter = new PrismaLibSql(libsql)
@@ -21,6 +23,20 @@ function createPrismaClient(): PrismaClient {
   return new PrismaClient({ log: ['error', 'warn'] })
 }
 
-export const db = globalForPrisma.prisma ?? createPrismaClient()
+let _client: PrismaClient | null = null
+function getClient(): PrismaClient {
+  if (!_client) {
+    _client = createPrismaClient()
+  }
+  return _client
+}
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+export const db = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getClient()
+    const value = (client as unknown as Record<string | symbol, unknown>)[prop]
+    return typeof value === 'function' ? value.bind(client) : value
+  },
+}) as PrismaClient
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = _client ?? undefined
