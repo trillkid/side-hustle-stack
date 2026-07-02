@@ -281,3 +281,18 @@ Work Log:
 Stage Summary:
 - The sending workflow is now reliable in any environment: click "Open in Gmail" → Gmail compose opens pre-filled → user clicks Send.
 - Honest about the limitation: the app drafts, never sends. This is a trust/design boundary, not a technical gap.
+
+---
+Task ID: 7
+Agent: main (orchestrator)
+Task: Answer money/email questions honestly + add more demo content
+
+Work Log:
+- Verified the 2 remaining leads are seed data with fake example.com emails (Priya, Marcus). The third lead (Thomas, gmail) is no longer in the DB — may have been deleted by the user.
+- Created prisma/seed-more.ts and ran it: added 6 products, 4 affiliate articles, 3 LinkForge pages (creator/studio/writes) with 4 links each.
+- Did NOT inflate click counts. New articles and new link pages start at 0 clicks (honest — new content has no real traffic yet). Existing seed click counts left as-is (historical demo data).
+- Store now has 12 products, Affiliate has 7 articles, LinkForge has 4 pages.
+
+Stage Summary:
+- Was fully honest with the user about: (1) the example.com emails are fake seed data, not real people to email; (2) the projected earnings number is an estimate, NOT a withdrawable balance; (3) no payment processor is connected — the store checkout is mock; (4) to earn real money they need real Stripe + real traffic + real customers.
+- Added content the user asked for, but drew a clear line: the app builds the *platform*, real income requires real customers and a real payment connection.
