@@ -1,0 +1,860 @@
+     1→'use client'
+     2→
+     3→import { useCallback, useEffect, useMemo, useState } from 'react'
+     4→import ReactMarkdown from 'react-markdown'
+     5→import {
+     6→  Star,
+     7→  PenLine,
+     8→  Plus,
+     9→  Loader2,
+    10→  ExternalLink,
+    11→  AlertCircle,
+    12→  MousePointerClick,
+    13→  FileText,
+    14→  DollarSign,
+    15→  RefreshCw,
+    16→} from 'lucide-react'
+    17→
+    18→import { Card, CardContent } from '@/components/ui/card'
+    19→import { Button } from '@/components/ui/button'
+    20→import { Badge } from '@/components/ui/badge'
+    21→import { Input } from '@/components/ui/input'
+    22→import { Textarea } from '@/components/ui/textarea'
+    23→import { Label } from '@/components/ui/label'
+    24→import { Skeleton } from '@/components/ui/skeleton'
+    25→import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+    26→import {
+    27→  Dialog,
+    28→  DialogContent,
+    29→  DialogDescription,
+    30→  DialogFooter,
+    31→  DialogHeader,
+    32→  DialogTitle,
+    33→} from '@/components/ui/dialog'
+    34→import { cn } from '@/lib/utils'
+    35→import { formatCurrency } from '@/lib/format'
+    36→import { useToast } from '@/hooks/use-toast'
+    37→
+    38→const ACCENT = '#ef4444'
+    39→const COMMISSION_PER_CLICK = 4
+    40→
+    41→type Article = {
+    42→  id: string
+    43→  title: string
+    44→  slug: string
+    45→  excerpt: string
+    46→  content: string
+    47→  category: string
+    48→  rating: number
+    49→  imageUrl: string
+    50→  affiliateUrl: string
+    51→  productName: string
+    52→  createdAt: string
+    53→  _count: { clicks: number }
+    54→}
+    55→
+    56→// ---------- Small UI helpers ----------
+    57→
+    58→function Stars({
+    59→  rating,
+    60→  size = 14,
+    61→  className,
+    62→}: {
+    63→  rating: number
+    64→  size?: number
+    65→  className?: string
+    66→}) {
+    67→  return (
+    68→    <div
+    69→      className={cn('flex items-center gap-0.5', className)}
+    70→      aria-label={`Rated ${rating} out of 5`}
+    71→    >
+    72→      {Array.from({ length: 5 }).map((_, i) => (
+    73→        <Star
+    74→          key={i}
+    75→          style={{
+    76→            width: size,
+    77→            height: size,
+    78→            color: ACCENT,
+    79→            fill: i < rating ? ACCENT : 'transparent',
+    80→            strokeWidth: 1.5,
+    81→          }}
+    82→        />
+    83→      ))}
+    84→    </div>
+    85→  )
+    86→}
+    87→
+    88→function StarPicker({
+    89→  value,
+    90→  onChange,
+    91→}: {
+    92→  value: number
+    93→  onChange: (v: number) => void
+    94→}) {
+    95→  const [hover, setHover] = useState(0)
+    96→  const shown = hover || value
+    97→  return (
+    98→    <div className="flex items-center gap-1">
+    99→      {Array.from({ length: 5 }).map((_, i) => {
+   100→        const n = i + 1
+   101→        return (
+   102→          <button
+   103→            key={n}
+   104→            type="button"
+   105→            onClick={() => onChange(n)}
+   106→            onMouseEnter={() => setHover(n)}
+   107→            onMouseLeave={() => setHover(0)}
+   108→            className="rounded-sm p-0.5 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50"
+   109→            aria-label={`Rate ${n} out of 5`}
+   110→          >
+   111→            <Star
+   112→              style={{
+   113→                width: 22,
+   114→                height: 22,
+   115→                color: ACCENT,
+   116→                fill: n <= shown ? ACCENT : 'transparent',
+   117→                strokeWidth: 1.5,
+   118→              }}
+   119→            />
+   120→          </button>
+   121→        )
+   122→      })}
+   123→      <span className="ml-2 text-sm text-muted-foreground">
+   124→        {value > 0 ? `${value}/5` : 'No rating'}
+   125→      </span>
+   126→    </div>
+   127→  )
+   128→}
+   129→
+   130→// ---------- Markdown renderer (no @tailwindcss/typography) ----------
+   131→
+   132→function Markdown({ content }: { content: string }) {
+   133→  return (
+   134→    <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
+   135→      <ReactMarkdown
+   136→        components={{
+   137→          h1: ({ children }) => (
+   138→            <h3 className="text-lg font-semibold text-foreground">{children}</h3>
+   139→          ),
+   140→          h2: ({ children }) => (
+   141→            <h3 className="text-base font-semibold text-foreground mt-2">
+   142→              {children}
+   143→            </h3>
+   144→          ),
+   145→          h3: ({ children }) => (
+   146→            <h4 className="text-sm font-semibold text-foreground">{children}</h4>
+   147→          ),
+   148→          p: ({ children }) => <p className="leading-relaxed">{children}</p>,
+   149→          ul: ({ children }) => (
+   150→            <ul className="list-disc space-y-1 pl-5">{children}</ul>
+   151→          ),
+   152→          ol: ({ children }) => (
+   153→            <ol className="list-decimal space-y-1 pl-5">{children}</ol>
+   154→          ),
+   155→          li: ({ children }) => <li>{children}</li>,
+   156→          a: ({ children, href }) => (
+   157→            <a
+   158→              href={href}
+   159→              target="_blank"
+   160→              rel="noreferrer"
+   161→              className="font-medium underline underline-offset-2 hover:opacity-80"
+   162→              style={{ color: ACCENT }}
+   163→            >
+   164→              {children}
+   165→            </a>
+   166→          ),
+   167→          strong: ({ children }) => (
+   168→            <strong className="font-semibold text-foreground">{children}</strong>
+   169→          ),
+   170→          em: ({ children }) => <em>{children}</em>,
+   171→          blockquote: ({ children }) => (
+   172→            <blockquote className="border-l-2 pl-3 italic text-muted-foreground">
+   173→              {children}
+   174→            </blockquote>
+   175→          ),
+   176→          code: ({ children }) => (
+   177→            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+   178→              {children}
+   179→            </code>
+   180→          ),
+   181→          pre: ({ children }) => (
+   182→            <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
+   183→              {children}
+   184→            </pre>
+   185→          ),
+   186→          hr: () => <hr className="border-border" />,
+   187→        }}
+   188→      >
+   189→        {content}
+   190→      </ReactMarkdown>
+   191→    </div>
+   192→  )
+   193→}
+   194→
+   195→// ---------- Article card ----------
+   196→
+   197→function ArticleCard({
+   198→  article,
+   199→  onRead,
+   200→}: {
+   201→  article: Article
+   202→  onRead: (a: Article) => void
+   203→}) {
+   204→  return (
+   205→    <Card className="group overflow-hidden p-0 gap-0 py-0">
+   206→      <button
+   207→        type="button"
+   208→        onClick={() => onRead(article)}
+   209→        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50"
+   210→        aria-label={`Read review: ${article.title}`}
+   211→      >
+   212→        <div className="relative aspect-video w-full overflow-hidden bg-muted">
+   213→          <img
+   214→            src={article.imageUrl}
+   215→            alt={article.productName}
+   216→            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+   217→            loading="lazy"
+   218→          />
+   219→          <div className="absolute left-3 top-3">
+   220→            <Badge
+   221→              className="border-transparent text-white shadow-sm"
+   222→              style={{ backgroundColor: ACCENT }}
+   223→            >
+   224→              {article.category}
+   225→            </Badge>
+   226→          </div>
+   227→        </div>
+   228→      </button>
+   229→
+   230→      <CardContent className="space-y-3 p-4">
+   231→        <div className="flex items-center justify-between gap-2">
+   232→          <Stars rating={article.rating} />
+   233→          <span className="text-xs text-muted-foreground">
+   234→            {article._count.clicks}{' '}
+   235→            {article._count.clicks === 1 ? 'click' : 'clicks'}
+   236→          </span>
+   237→        </div>
+   238→
+   239→        <button
+   240→          type="button"
+   241→          onClick={() => onRead(article)}
+   242→          className="block w-full text-left"
+   243→        >
+   244→          <h3 className="line-clamp-2 font-semibold leading-snug hover:text-red-600 dark:hover:text-red-400 transition-colors">
+   245→            {article.title}
+   246→          </h3>
+   247→        </button>
+   248→
+   249→        <p className="line-clamp-2 text-sm text-muted-foreground leading-relaxed">
+   250→          {article.excerpt}
+   251→        </p>
+   252→
+   253→        <div className="flex items-center justify-between pt-1">
+   254→          <span className="text-xs text-muted-foreground">
+   255→            {article.productName}
+   256→          </span>
+   257→          <Button
+   258→            size="sm"
+   259→            variant="outline"
+   260→            className="border-red-500/30 text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10"
+   261→            onClick={() => onRead(article)}
+   262→          >
+   263→            Read review
+   264→          </Button>
+   265→        </div>
+   266→      </CardContent>
+   267→    </Card>
+   268→  )
+   269→}
+   270→
+   271→// ---------- Write review dialog ----------
+   272→
+   273→type WriteForm = {
+   274→  title: string
+   275→  productName: string
+   276→  category: string
+   277→  rating: number
+   278→  excerpt: string
+   279→  content: string
+   280→  imageUrl: string
+   281→  affiliateUrl: string
+   282→}
+   283→
+   284→const EMPTY_FORM: WriteForm = {
+   285→  title: '',
+   286→  productName: '',
+   287→  category: '',
+   288→  rating: 0,
+   289→  excerpt: '',
+   290→  content: '',
+   291→  imageUrl: '',
+   292→  affiliateUrl: '',
+   293→}
+   294→
+   295→function WriteReviewDialog({
+   296→  open,
+   297→  onOpenChange,
+   298→  onCreated,
+   299→}: {
+   300→  open: boolean
+   301→  onOpenChange: (v: boolean) => void
+   302→  onCreated: () => void
+   303→}) {
+   304→  const { toast } = useToast()
+   305→  const [form, setForm] = useState<WriteForm>(EMPTY_FORM)
+   306→  const [submitting, setSubmitting] = useState(false)
+   307→
+   308→  const set = <K extends keyof WriteForm>(key: K, val: WriteForm[K]) =>
+   309→    setForm((f) => ({ ...f, [key]: val }))
+   310→
+   311→  const reset = () => setForm(EMPTY_FORM)
+   312→
+   313→  const handleSubmit = async (e: React.FormEvent) => {
+   314→    e.preventDefault()
+   315→
+   316→    if (form.rating < 1 || form.rating > 5) {
+   317→      toast({
+   318→        title: 'Rating required',
+   319→        description: 'Please pick a rating from 1 to 5 stars.',
+   320→        variant: 'destructive',
+   321→      })
+   322→      return
+   323→    }
+   324→
+   325→    setSubmitting(true)
+   326→    try {
+   327→      const res = await fetch('/api/affiliate/articles', {
+   328→        method: 'POST',
+   329→        headers: { 'Content-Type': 'application/json' },
+   330→        body: JSON.stringify(form),
+   331→      })
+   332→      const data = await res.json()
+   333→      if (!res.ok) {
+   334→        throw new Error(data?.error || 'Failed to create review')
+   335→      }
+   336→      toast({
+   337→        title: 'Review published',
+   338→        description: `"${form.title}" is now live on your affiliate board.`,
+   339→      })
+   340→      reset()
+   341→      onOpenChange(false)
+   342→      onCreated()
+   343→    } catch (err) {
+   344→      toast({
+   345→        title: 'Could not publish review',
+   346→        description:
+   347→          err instanceof Error ? err.message : 'Something went wrong.',
+   348→        variant: 'destructive',
+   349→      })
+   350→    } finally {
+   351→      setSubmitting(false)
+   352→    }
+   353→  }
+   354→
+   355→  return (
+   356→    <Dialog
+   357→      open={open}
+   358→      onOpenChange={(v) => {
+   359→        if (!v) reset()
+   360→        onOpenChange(v)
+   361→      }}
+   362→    >
+   363→      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+   364→        <DialogHeader>
+   365→          <DialogTitle>Write a review</DialogTitle>
+   366→          <DialogDescription>
+   367→            Publish a product review with your affiliate link. Each click earns
+   368→            you commission.
+   369→          </DialogDescription>
+   370→        </DialogHeader>
+   371→
+   372→        <form onSubmit={handleSubmit} className="space-y-4">
+   373→          <div className="grid gap-4 sm:grid-cols-2">
+   374→            <div className="space-y-1.5">
+   375→              <Label htmlFor="af-title">Title</Label>
+   376→              <Input
+   377→                id="af-title"
+   378→                placeholder="Blue Yeti X Review: Still the Best USB Mic?"
+   379→                value={form.title}
+   380→                onChange={(e) => set('title', e.target.value)}
+   381→                required
+   382→                maxLength={140}
+   383→              />
+   384→            </div>
+   385→            <div className="space-y-1.5">
+   386→              <Label htmlFor="af-product">Product name</Label>
+   387→              <Input
+   388→                id="af-product"
+   389→                placeholder="Blue Yeti X"
+   390→                value={form.productName}
+   391→                onChange={(e) => set('productName', e.target.value)}
+   392→                required
+   393→                maxLength={120}
+   394→              />
+   395→            </div>
+   396→            <div className="space-y-1.5">
+   397→              <Label htmlFor="af-category">Category</Label>
+   398→              <Input
+   399→                id="af-category"
+   400→                placeholder="Audio Gear"
+   401→                value={form.category}
+   402→                onChange={(e) => set('category', e.target.value)}
+   403→                required
+   404→                maxLength={60}
+   405→              />
+   406→            </div>
+   407→            <div className="space-y-1.5">
+   408→              <Label>Rating</Label>
+   409→              <StarPicker
+   410→                value={form.rating}
+   411→                onChange={(v) => set('rating', v)}
+   412→              />
+   413→            </div>
+   414→          </div>
+   415→
+   416→          <div className="space-y-1.5">
+   417→            <Label htmlFor="af-excerpt">Excerpt</Label>
+   418→            <Textarea
+   419→              id="af-excerpt"
+   420→              placeholder="A one- or two-sentence hook shown on the card."
+   421→              value={form.excerpt}
+   422→              onChange={(e) => set('excerpt', e.target.value)}
+   423→              required
+   424→              rows={2}
+   425→              maxLength={240}
+   426→            />
+   427→          </div>
+   428→
+   429→          <div className="space-y-1.5">
+   430→            <div className="flex items-center justify-between">
+   431→              <Label htmlFor="af-content">Content (Markdown)</Label>
+   432→              <span className="text-xs text-muted-foreground">
+   433→                Markdown supported
+   434→              </span>
+   435→            </div>
+   436→            <Textarea
+   437→              id="af-content"
+   438→              placeholder={
+   439→                '## Verdict\n\nCrisp audio, easy setup. **Rating: 4.6/5**\n\n- Pros: warm vocals\n- Cons: heavy'
+   440→              }
+   441→              value={form.content}
+   442→              onChange={(e) => set('content', e.target.value)}
+   443→              required
+   444→              rows={6}
+   445→              className="font-mono text-xs"
+   446→            />
+   447→          </div>
+   448→
+   449→          <div className="grid gap-4 sm:grid-cols-2">
+   450→            <div className="space-y-1.5">
+   451→              <Label htmlFor="af-image">Image URL</Label>
+   452→              <Input
+   453→                id="af-image"
+   454→                type="url"
+   455→                placeholder="https://images.unsplash.com/..."
+   456→                value={form.imageUrl}
+   457→                onChange={(e) => set('imageUrl', e.target.value)}
+   458→                required
+   459→              />
+   460→            </div>
+   461→            <div className="space-y-1.5">
+   462→              <Label htmlFor="af-affiliate">Affiliate URL</Label>
+   463→              <Input
+   464→                id="af-affiliate"
+   465→                type="url"
+   466→                placeholder="https://www.amazon.com/dp/..."
+   467→                value={form.affiliateUrl}
+   468→                onChange={(e) => set('affiliateUrl', e.target.value)}
+   469→                required
+   470→              />
+   471→            </div>
+   472→          </div>
+   473→
+   474→          <DialogFooter className="pt-2">
+   475→            <Button
+   476→              type="button"
+   477→              variant="outline"
+   478→              onClick={() => onOpenChange(false)}
+   479→              disabled={submitting}
+   480→            >
+   481→              Cancel
+   482→            </Button>
+   483→            <Button
+   484→              type="submit"
+   485→              disabled={submitting}
+   486→              className="text-white"
+   487→              style={{ backgroundColor: ACCENT }}
+   488→            >
+   489→              {submitting ? (
+   490→                <>
+   491→                  <Loader2 className="h-4 w-4 animate-spin" />
+   492→                  Publishing…
+   493→                </>
+   494→              ) : (
+   495→                <>
+   496→                  <Plus className="h-4 w-4" />
+   497→                  Publish review
+   498→                </>
+   499→              )}
+   500→            </Button>
+   501→          </DialogFooter>
+   502→        </form>
+   503→      </DialogContent>
+   504→    </Dialog>
+   505→  )
+   506→}
+   507→
+   508→// ---------- Read review dialog ----------
+   509→
+   510→function ReadReviewDialog({
+   511→  article,
+   512→  onOpenChange,
+   513→  onCheckout,
+   514→  checkingOut,
+   515→}: {
+   516→  article: Article | null
+   517→  onOpenChange: (v: boolean) => void
+   518→  onCheckout: (a: Article) => void
+   519→  checkingOut: boolean
+   520→}) {
+   521→  return (
+   522→    <Dialog
+   523→      open={!!article}
+   524→      onOpenChange={onOpenChange}
+   525→    >
+   526→      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+   527→        {article && (
+   528→          <>
+   529→            <DialogHeader>
+   530→              <div className="mb-2 flex flex-wrap items-center gap-2">
+   531→                <Badge
+   532→                  className="border-transparent text-white"
+   533→                  style={{ backgroundColor: ACCENT }}
+   534→                >
+   535→                  {article.category}
+   536→                </Badge>
+   537→                <Stars rating={article.rating} size={16} />
+   538→                <span className="text-xs text-muted-foreground">
+   539→                  {article._count.clicks}{' '}
+   540→                  {article._count.clicks === 1 ? 'click' : 'clicks'}
+   541→                </span>
+   542→              </div>
+   543→              <DialogTitle className="text-left text-xl">
+   544→                {article.title}
+   545→              </DialogTitle>
+   546→              <DialogDescription className="text-left">
+   547→                Product: <span className="font-medium text-foreground">{article.productName}</span>
+   548→              </DialogDescription>
+   549→            </DialogHeader>
+   550→
+   551→            <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
+   552→              <img
+   553→                src={article.imageUrl}
+   554→                alt={article.productName}
+   555→                className="h-full w-full object-cover"
+   556→              />
+   557→            </div>
+   558→
+   559→            <Markdown content={article.content} />
+   560→
+   561→            <DialogFooter className="pt-2">
+   562→              <Button
+   563→                type="button"
+   564→                onClick={() => onCheckout(article)}
+   565→                disabled={checkingOut}
+   566→                className="w-full text-white sm:w-auto"
+   567→                style={{ backgroundColor: ACCENT }}
+   568→                size="lg"
+   569→              >
+   570→                {checkingOut ? (
+   571→                  <>
+   572→                    <Loader2 className="h-4 w-4 animate-spin" />
+   573→                    Opening…
+   574→                  </>
+   575→                ) : (
+   576→                  <>
+   577→                    <ExternalLink className="h-4 w-4" />
+   578→                    Check price →
+   579→                  </>
+   580→                )}
+   581→              </Button>
+   582→            </DialogFooter>
+   583→          </>
+   584→        )}
+   585→      </DialogContent>
+   586→    </Dialog>
+   587→  )
+   588→}
+   589→
+   590→// ---------- Main module ----------
+   591→
+   592→export default function AffiliateModule() {
+   593→  const { toast } = useToast()
+   594→  const [articles, setArticles] = useState<Article[] | null>(null)
+   595→  const [error, setError] = useState<string | null>(null)
+   596→  const [loading, setLoading] = useState(true)
+   597→
+   598→  const [writeOpen, setWriteOpen] = useState(false)
+   599→  const [active, setActive] = useState<Article | null>(null)
+   600→  const [checkingOut, setCheckingOut] = useState(false)
+   601→
+   602→  const fetchArticles = useCallback(async () => {
+   603→    setLoading(true)
+   604→    setError(null)
+   605→    try {
+   606→      const res = await fetch('/api/affiliate/articles')
+   607→      const data = await res.json()
+   608→      if (!res.ok) {
+   609→        throw new Error(data?.error || 'Failed to load articles')
+   610→      }
+   611→      setArticles(data.articles as Article[])
+   612→    } catch (err) {
+   613→      setError(err instanceof Error ? err.message : 'Failed to load articles')
+   614→    } finally {
+   615→      setLoading(false)
+   616→    }
+   617→  }, [])
+   618→
+   619→  useEffect(() => {
+   620→    fetchArticles()
+   621→  }, [fetchArticles])
+   622→
+   623→  // Keep `active` in sync if its click count changes (optimistic UI)
+   624→  const updateArticleClicks = useCallback(
+   625→    (id: string, delta: number) => {
+   626→      setArticles((prev) => {
+   627→        if (!prev) return prev
+   628→        return prev.map((a) =>
+   629→          a.id === id
+   630→            ? { ...a, _count: { clicks: a._count.clicks + delta } }
+   631→            : a
+   632→        )
+   633→      })
+   634→      setActive((prev) => {
+   635→        if (!prev || prev.id !== id) return prev
+   636→        return {
+   637→          ...prev,
+   638→          _count: { clicks: prev._count.clicks + delta },
+   639→        }
+   640→      })
+   641→    },
+   642→    []
+   643→  )
+   644→
+   645→  const handleCheckout = useCallback(
+   646→    async (article: Article) => {
+   647→      setCheckingOut(true)
+   648→      // Optimistic click increment
+   649→      updateArticleClicks(article.id, 1)
+   650→      try {
+   651→        const res = await fetch('/api/affiliate/clicks', {
+   652→          method: 'POST',
+   653→          headers: { 'Content-Type': 'application/json' },
+   654→          body: JSON.stringify({ articleId: article.id }),
+   655→        })
+   656→        const data = await res.json()
+   657→        if (!res.ok) {
+   658→          // Roll back optimistic increment
+   659→          updateArticleClicks(article.id, -1)
+   660→          throw new Error(data?.error || 'Failed to record click')
+   661→        }
+   662→        toast({
+   663→          title: 'Opening retailer…',
+   664→          description: 'Your click was tracked. Commission incoming.',
+   665→        })
+   666→        if (typeof window !== 'undefined' && data.url) {
+   667→          window.open(data.url, '_blank', 'noopener,noreferrer')
+   668→        }
+   669→      } catch (err) {
+   670→        toast({
+   671→          title: 'Click tracking failed',
+   672→          description:
+   673→            err instanceof Error ? err.message : 'Please try again.',
+   674→          variant: 'destructive',
+   675→        })
+   676→      } finally {
+   677→        setCheckingOut(false)
+   678→      }
+   679→    },
+   680→    [toast, updateArticleClicks]
+   681→  )
+   682→
+   683→  const stats = useMemo(() => {
+   684→    if (!articles) return { total: 0, clicks: 0, commission: 0 }
+   685→    const clicks = articles.reduce((s, a) => s + a._count.clicks, 0)
+   686→    return {
+   687→      total: articles.length,
+   688→      clicks,
+   689→      commission: clicks * COMMISSION_PER_CLICK,
+   690→    }
+   691→  }, [articles])
+   692→
+   693→  return (
+   694→    <div className="space-y-6">
+   695→      {/* Header row */}
+   696→      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   697→        <div className="flex items-start gap-3">
+   698→          <div
+   699→            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
+   700→            style={{ backgroundColor: `${ACCENT}1a`, color: ACCENT }}
+   701→          >
+   702→            <PenLine className="h-5 w-5" />
+   703→          </div>
+   704→          <div>
+   705→            <h2 className="text-xl font-semibold tracking-tight">
+   706→              Affiliate Reviews
+   707→            </h2>
+   708→            <p className="text-sm text-muted-foreground">
+   709→              Earn commission on every click
+   710→            </p>
+   711→          </div>
+   712→        </div>
+   713→        <Button
+   714→          onClick={() => setWriteOpen(true)}
+   715→          className="text-white"
+   716→          style={{ backgroundColor: ACCENT }}
+   717→        >
+   718→          <Plus className="h-4 w-4" />
+   719→          Write review
+   720→        </Button>
+   721→      </div>
+   722→
+   723→      {/* Performance summary */}
+   724→      <div className="grid gap-4 sm:grid-cols-3">
+   725→        <Card>
+   726→          <CardContent className="flex items-center gap-4 p-5">
+   727→            <div
+   728→              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+   729→              style={{ backgroundColor: `${ACCENT}1a`, color: ACCENT }}
+   730→            >
+   731→              <FileText className="h-5 w-5" />
+   732→            </div>
+   733→            <div className="min-w-0">
+   734→              <p className="text-sm text-muted-foreground">Total reviews</p>
+   735→              <p className="text-2xl font-semibold tracking-tight">
+   736→                {loading ? '—' : stats.total}
+   737→              </p>
+   738→            </div>
+   739→          </CardContent>
+   740→        </Card>
+   741→        <Card>
+   742→          <CardContent className="flex items-center gap-4 p-5">
+   743→            <div
+   744→              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+   745→              style={{ backgroundColor: `${ACCENT}1a`, color: ACCENT }}
+   746→            >
+   747→              <MousePointerClick className="h-5 w-5" />
+   748→            </div>
+   749→            <div className="min-w-0">
+   750→              <p className="text-sm text-muted-foreground">Total clicks</p>
+   751→              <p className="text-2xl font-semibold tracking-tight">
+   752→                {loading ? '—' : stats.clicks}
+   753→              </p>
+   754→            </div>
+   755→          </CardContent>
+   756→        </Card>
+   757→        <Card>
+   758→          <CardContent className="flex items-center gap-4 p-5">
+   759→            <div
+   760→              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+   761→              style={{ backgroundColor: `${ACCENT}1a`, color: ACCENT }}
+   762→            >
+   763→              <DollarSign className="h-5 w-5" />
+   764→            </div>
+   765→            <div className="min-w-0">
+   766→              <p className="text-sm text-muted-foreground">
+   767→                Estimated commission
+   768→              </p>
+   769→              <p className="text-2xl font-semibold tracking-tight">
+   770→                {loading ? '—' : formatCurrency(stats.commission)}
+   771→              </p>
+   772→              <p className="mt-0.5 text-xs text-muted-foreground">
+   773→                @ ~$4/click · transparent estimate
+   774→              </p>
+   775→            </div>
+   776→          </CardContent>
+   777→        </Card>
+   778→      </div>
+   779→
+   780→      {/* Articles area */}
+   781→      {loading ? (
+   782→        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+   783→          {Array.from({ length: 6 }).map((_, i) => (
+   784→            <Card key={i} className="overflow-hidden p-0 gap-0 py-0">
+   785→              <Skeleton className="aspect-video w-full rounded-none" />
+   786→              <CardContent className="space-y-3 p-4">
+   787→                <Skeleton className="h-4 w-24" />
+   788→                <Skeleton className="h-5 w-full" />
+   789→                <Skeleton className="h-4 w-3/4" />
+   790→                <Skeleton className="h-8 w-28" />
+   791→              </CardContent>
+   792→            </Card>
+   793→          ))}
+   794→        </div>
+   795→      ) : error ? (
+   796→        <Alert variant="destructive">
+   797→          <AlertCircle className="h-4 w-4" />
+   798→          <AlertTitle>Couldn&apos;t load reviews</AlertTitle>
+   799→          <AlertDescription className="flex items-center gap-3">
+   800→            <span>{error}</span>
+   801→            <Button
+   802→              size="sm"
+   803→              variant="outline"
+   804→              onClick={fetchArticles}
+   805→              className="ml-auto"
+   806→            >
+   807→              <RefreshCw className="h-4 w-4" />
+   808→              Retry
+   809→            </Button>
+   810→          </AlertDescription>
+   811→        </Alert>
+   812→      ) : articles && articles.length === 0 ? (
+   813→        <Card>
+   814→          <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+   815→            <div
+   816→              className="flex h-12 w-12 items-center justify-center rounded-full"
+   817→              style={{ backgroundColor: `${ACCENT}1a`, color: ACCENT }}
+   818→            >
+   819→              <PenLine className="h-6 w-6" />
+   820→            </div>
+   821→            <div>
+   822→              <p className="font-medium">No reviews yet</p>
+   823→              <p className="text-sm text-muted-foreground">
+   824→                Write your first product review to start earning commission.
+   825→              </p>
+   826→            </div>
+   827→            <Button
+   828→              onClick={() => setWriteOpen(true)}
+   829→              className="mt-1 text-white"
+   830→              style={{ backgroundColor: ACCENT }}
+   831→            >
+   832→              <Plus className="h-4 w-4" />
+   833→              Write your first review
+   834→            </Button>
+   835→          </CardContent>
+   836→        </Card>
+   837→      ) : (
+   838→        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+   839→          {articles?.map((a) => (
+   840→            <ArticleCard key={a.id} article={a} onRead={setActive} />
+   841→          ))}
+   842→        </div>
+   843→      )}
+   844→
+   845→      {/* Dialogs */}
+   846→      <WriteReviewDialog
+   847→        open={writeOpen}
+   848→        onOpenChange={setWriteOpen}
+   849→        onCreated={fetchArticles}
+   850→      />
+   851→      <ReadReviewDialog
+   852→        article={active}
+   853→        onOpenChange={(v) => !v && setActive(null)}
+   854→        onCheckout={handleCheckout}
+   855→        checkingOut={checkingOut}
+   856→      />
+   857→    </div>
+   858→  )
+   859→}
+   860→

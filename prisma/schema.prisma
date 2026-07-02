@@ -1,8 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Side Hustle Stack — unified income-generation toolkit
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +9,115 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ---------- Module 1: Freelance Hub ----------
+model FreelanceService {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  price       Float
+  category    String
+  icon        String   @default("Briefcase")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  leads       FreelanceLead[]
 }
 
-model Post {
+model FreelanceLead {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  name      String
+  email     String
+  message   String
+  serviceId String?
+  status    String   @default("new") // new | contacted | won | lost
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  service   FreelanceService? @relation(fields: [serviceId], references: [id])
+}
+
+// ---------- Module 2: Digital Product Store ----------
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  image       String
+  category    String
+  createdAt   DateTime @default(now())
+}
+
+model StoreOrder {
+  id           String   @id @default(cuid())
+  customerName String
+  email        String
+  total        Float
+  itemsJson    String // JSON-encoded cart items
+  status       String   @default("paid")
+  createdAt    DateTime @default(now())
+}
+
+// ---------- Module 3: Affiliate Reviews ----------
+model ReviewArticle {
+  id           String   @id @default(cuid())
+  title        String
+  slug         String   @unique
+  excerpt      String
+  content      String   // markdown
+  category     String
+  rating       Int      // 1-5
+  imageUrl     String
+  affiliateUrl String
+  productName  String
+  createdAt    DateTime @default(now())
+  clicks       AffiliateClick[]
+}
+
+model AffiliateClick {
+  id        String   @id @default(cuid())
+  articleId String
+  clickedAt DateTime @default(now())
+  article   ReviewArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+}
+
+// ---------- Module 4: LinkForge SaaS ----------
+model LinkPage {
+  id         String   @id @default(cuid())
+  slug       String   @unique
+  title      String
+  bio        String
+  themeColor String   @default("#10b981")
+  plan       String   @default("free") // free | pro
+  createdAt  DateTime @default(now())
+  links      LinkItem[]
+}
+
+model LinkItem {
+  id     String   @id @default(cuid())
+  pageId String
+  label  String
+  url    String
+  clicks Int      @default(0)
+  order  Int      @default(0)
+  page   LinkPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+}
+
+// ---------- Module 5: Job Tracker + Portfolio ----------
+model JobApplication {
+  id          String    @id @default(cuid())
+  company     String
+  role        String
+  status      String    @default("wishlist") // wishlist | applied | interview | offer | rejected
+  appliedDate DateTime?
+  link        String?
+  notes       String?
+  salary      String?
+  createdAt   DateTime  @default(now())
+}
+
+model PortfolioProject {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  url         String?
+  imageUrl    String?
+  tags        String   // comma separated
+  createdAt   DateTime @default(now())
 }
