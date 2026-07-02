@@ -260,3 +260,24 @@ Stage Summary:
 - 3 real leads ready to reply to: Thomas bowyer-marche, Priya Sharma, Marcus Lee.
 - User can now draft a personalized AI reply per lead with one click, edit it, and open it in their email client to send — they stay in control of actually sending.
 - The app does NOT send emails itself (no email integration, and we don't impersonate the user to third parties).
+
+---
+Task ID: 6
+Agent: main (orchestrator)
+Task: Fix email sending confusion — replace flaky mailto with Gmail/Outlook web compose
+
+Work Log:
+- Root cause of user's frustration: the "Open in email" button used a `mailto:` link, which (a) requires a locally-configured mail client (often missing in browser/sandbox environments), and (b) only ever creates a DRAFT — it never sends. The user expected it to send, and in their environment the draft wasn't even opening reliably.
+- IMPORTANT design decision (held the line): the app does NOT send emails itself. Sending on the user's behalf would require email credentials/SMTP and impersonating the user to third parties — a line I won't cross. The tool drafts; the user sends from their own inbox.
+- Replaced the single mailto button with three options + Copy:
+  - "Open in Gmail" (primary, emerald) → https://mail.google.com/mail/?view=cm&fs=1&to=...&su=...&body=... — opens Gmail compose in a new browser tab, fully pre-filled. Works in any browser, no mail app needed.
+  - "Outlook" → https://outlook.live.com/mail/0/deeplink/compose?to=...&subject=...&body=...
+  - "Mail app" → mailto: (kept as legacy fallback for users with a configured client)
+  - "Copy text" → clipboard fallback
+- Added a sky-colored "How sending works" banner that explicitly states: "This tool drafts the email for you — it doesn't send it. Pick an option below to open the draft in your inbox, then click Send there. Replace [Your name] first."
+- Updated dialog description to set the right expectation ("open it in Gmail or Outlook to send").
+- Verified: Marcus's reply dialog → AI drafted a coffee-roastery-personalized reply → Gmail link correctly formed with to/subject/body URL-encoded → explanation banner visible → lint clean.
+
+Stage Summary:
+- The sending workflow is now reliable in any environment: click "Open in Gmail" → Gmail compose opens pre-filled → user clicks Send.
+- Honest about the limitation: the app drafts, never sends. This is a trust/design boundary, not a technical gap.

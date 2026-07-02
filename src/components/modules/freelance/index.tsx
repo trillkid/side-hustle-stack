@@ -789,13 +789,31 @@ function ReplyDialog({
     }
   }
 
-  // mailto: link opens the user's own email client with everything pre-filled.
-  // The user reviews and clicks send themselves — we never send anything.
-  const mailtoHref = lead
-    ? `mailto:${encodeURIComponent(lead.email)}?subject=${encodeURIComponent(
-        subject
-      )}&body=${encodeURIComponent(draft)}`
+  // Compose URLs open the user's webmail in a browser tab, pre-filled.
+  // We NEVER send anything — the user reviews and clicks Send in their own inbox.
+  // Gmail's compose URL works in any browser (no local mail app needed).
+  const encTo = lead ? encodeURIComponent(lead.email) : ''
+  const encSubject = encodeURIComponent(subject)
+  const encBody = encodeURIComponent(draft)
+
+  const gmailHref = lead
+    ? `https://mail.google.com/mail/?view=cm&fs=1&to=${encTo}&su=${encSubject}&body=${encBody}`
     : '#'
+
+  const outlookHref = lead
+    ? `https://outlook.live.com/mail/0/deeplink/compose?to=${encTo}&subject=${encSubject}&body=${encBody}`
+    : '#'
+
+  const mailtoHref = lead
+    ? `mailto:${encTo}?subject=${encSubject}&body=${encBody}`
+    : '#'
+
+  function notifyOpened(client: string) {
+    toast({
+      title: `Opened in ${client}`,
+      description: 'A compose tab opened — review the message and click Send there.',
+    })
+  }
 
   return (
     <Dialog
@@ -819,7 +837,7 @@ function ReplyDialog({
             {lead
               ? `AI-drafted reply to ${lead.name} about ${
                   lead.service?.title ?? 'their enquiry'
-                }. Edit it, then open it in your email client to send.`
+                }. Edit it below, then open it in Gmail or Outlook to send.`
               : ''}
           </DialogDescription>
         </DialogHeader>
@@ -896,54 +914,85 @@ function ReplyDialog({
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCopy}
-                disabled={loading || !draft}
-              >
-                {copied ? (
-                  <Check className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-                {copied ? 'Copied' : 'Copy'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRegenerate}
-                disabled={loading}
-              >
-                <RotateCcw
-                  className={cn('h-4 w-4', loading && 'animate-spin')}
-                />
-                Regenerate
-              </Button>
-              <div className="ml-auto flex items-center gap-2">
-                {loading && (
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Drafting…
-                  </span>
-                )}
+            {/* Honest explanation banner */}
+            {hasDrafted && !loading && (
+              <div className="rounded-md border border-sky-300/50 bg-sky-500/10 px-3 py-2 text-xs text-sky-800 dark:text-sky-200">
+                <p className="font-medium">How sending works</p>
+                <p className="mt-0.5">
+                  This tool drafts the email for you — it doesn&apos;t send it.
+                  Pick an option below to open the draft in your inbox, then
+                  click <span className="font-semibold">Send</span> there.
+                  Replace <span className="font-mono">[Your name]</span> first.
+                </p>
+              </div>
+            )}
+
+            {/* Send options */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   asChild
                   size="sm"
                   className="bg-emerald-600 text-white hover:bg-emerald-600/90"
                 >
-                  <a href={mailtoHref} onClick={() =>
-                    toast({
-                      title: 'Opening your email app',
-                      description: 'Review the message, then hit send.',
-                    })
-                  }>
+                  <a
+                    href={gmailHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => notifyOpened('Gmail')}
+                  >
                     <ExternalLink className="h-4 w-4" />
-                    Open in email
+                    Open in Gmail
                   </a>
                 </Button>
+                <Button asChild variant="outline" size="sm">
+                  <a
+                    href={outlookHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => notifyOpened('Outlook')}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Outlook
+                  </a>
+                </Button>
+                <Button asChild variant="outline" size="sm">
+                  <a href={mailtoHref} onClick={() => notifyOpened('your mail app')}>
+                    <ExternalLink className="h-4 w-4" />
+                    Mail app
+                  </a>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopy}
+                  disabled={loading || !draft}
+                >
+                  {copied ? (
+                    <Check className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  {copied ? 'Copied' : 'Copy text'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRegenerate}
+                  disabled={loading}
+                >
+                  <RotateCcw
+                    className={cn('h-4 w-4', loading && 'animate-spin')}
+                  />
+                  Regenerate
+                </Button>
               </div>
+              {loading && (
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Drafting…
+                </span>
+              )}
             </div>
 
             {hasDrafted && !loading && (
