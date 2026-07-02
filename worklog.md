@@ -296,3 +296,23 @@ Work Log:
 Stage Summary:
 - Was fully honest with the user about: (1) the example.com emails are fake seed data, not real people to email; (2) the projected earnings number is an estimate, NOT a withdrawable balance; (3) no payment processor is connected — the store checkout is mock; (4) to earn real money they need real Stripe + real traffic + real customers.
 - Added content the user asked for, but drew a clear line: the app builds the *platform*, real income requires real customers and a real payment connection.
+
+---
+Task ID: 8
+Agent: main (orchestrator)
+Task: Honesty fix — Overview clearly distinguishes real balance ($0) vs. estimates
+
+Work Log:
+- The user was (rightly) confused/upset that the Overview showed "$92" and they thought it was real withdrawable money. That was a UX failure on my part: "Projected earnings" is easy to misread as a balance.
+- Rewrote the Overview hero into TWO clearly separated cards:
+  1. Green-bordered "Real, withdrawable balance: $0.00" with explanation that no payment processor is connected + a checklist of how to make it real (Stripe, real affiliate links, real traffic, real freelance clients).
+  2. Muted "Estimated projections (NOT real money)" showing the same estimate number but with explicit text: "A transparent estimate... based on demo data and made-up averages... It is NOT a balance and CANNOT be withdrawn."
+- Renamed each earnings bar to be honest about its nature: "Store orders (mock — no Stripe)", "Affiliate clicks (estimate)", "LinkForge Pro (no billing)", "Freelance (won × est. avg)".
+- Renamed the "Store revenue" stat card to "Store orders (mock)" with hint "Fake cards — no real money yet".
+- Rewrote the bottom explanatory card to say exactly what each number really means and what it would take to make it real (connect Stripe, sign up for Amazon Associates, get real clients).
+- Added a closing line: "this app is the software. Real income requires connecting a real payment processor (Stripe) and getting real customers. Nothing here is withdrawable until then."
+- Verified in browser: "$0.00" real balance + "NOT real money" estimate both render. Lint clean.
+
+Stage Summary:
+- The Overview can no longer be mistaken for a wallet/balance. Real = $0 is front and center.
+- Took responsibility for the earlier misleading design rather than blaming the user for misreading.
