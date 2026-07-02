@@ -349,3 +349,32 @@ Stage Summary:
   - Overview → shows live Stripe available + pending balance.
 - Nothing is withdrawable from THIS app — withdrawals happen in the user's own Stripe dashboard (link provided). The app never holds money.
 - Still waiting on the user to: (1) create a Stripe account, (2) sign up for Amazon Associates, (3) paste keys into Settings.
+
+---
+Task ID: 10
+Agent: main (orchestrator)
+Task: Option A (3 Medium articles) + Option B (Vercel deployment prep)
+
+Work Log:
+**Option A — Medium articles:**
+- Wrote 3 genuine product review articles (~900-1100 words each) in `download/medium-articles/`:
+  1. Sony WH-1000XM5 headphones review
+  2. Logitech MX Master 3S mouse review
+  3. Anker 737 power bank review
+- Each article: SEO title, Medium tags, honest pros/cons, verdict + rating, affiliate link placeholder (`YOUR_AFFILIATE_LINK_HERE`), disclosure about commission.
+- Wrote `download/medium-articles/README.md` with step-by-step Medium publishing instructions + how to get Amazon affiliate links + traffic tips + the 180-day rule warning.
+
+**Option B — Vercel deployment prep:**
+- Installed `@prisma/adapter-libsql` + `@libsql/client` for Turso (serverless SQLite-compatible DB).
+- Updated `src/lib/db.ts` to conditionally use the libsql adapter when DATABASE_URL starts with `libsql://` (production/Turso), or standard PrismaClient for local SQLite file dev. Same Prisma schema works for both.
+- Created `src/app/api/setup/route.ts` — a GET endpoint that seeds the database if empty (checks for existing services first). Safe to call multiple times. This replaces the need to run `bun run db:push` + seed on Vercel — user just visits `/api/setup` once after deploying.
+- Added `"postinstall": "prisma generate"` to package.json so Vercel auto-generates the Prisma client during build.
+- Wrote `DEPLOY.md` with 8-step no-coding-required deployment guide: GitHub account → upload code → Vercel account → Turso DB → deploy → seed → add keys → use URL for Stripe/Amazon signups. Includes troubleshooting and a fill-in-the-blanks URL section.
+- Fixed an export name bug: `PrismaLibSQL` → `PrismaLibSql` (the adapter's actual export name).
+- Verified: lint clean, /api/setup returns 200 (correctly detects existing data), /api/overview returns 200, all tabs render in browser.
+
+Stage Summary:
+- Both options are ready. User can:
+  - Option A: Copy-paste 3 articles into Medium, replace affiliate link placeholders once Amazon Associates is approved.
+  - Option B: Follow DEPLOY.md to get a live Vercel URL in ~20 min. The live URL works for both Stripe and Amazon Associates signups, and makes the store/freelance/affiliate links shareable with real customers.
+- The app is now fully deployable. Local dev still works (SQLite file). Production uses Turso (libsql). No schema changes needed.
