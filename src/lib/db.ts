@@ -10,16 +10,19 @@ function createPrismaClient(): PrismaClient {
   const url = process.env.DATABASE_URL
   const authToken = process.env.DATABASE_AUTH_TOKEN
 
+  // If no URL, fall back to local SQLite file (local dev only)
   if (!url) {
     return new PrismaClient({ log: ['error', 'warn'] })
   }
 
+  // Turso/libsql (production on Vercel)
   if (url.startsWith('libsql://')) {
     const libsql = createClient({ url, authToken })
     const adapter = new PrismaLibSql(libsql)
     return new PrismaClient({ adapter, log: ['error', 'warn'] })
   }
 
+  // Local SQLite file
   return new PrismaClient({ log: ['error', 'warn'] })
 }
 
