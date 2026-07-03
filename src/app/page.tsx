@@ -12,6 +12,7 @@ import {
   Github,
   Heart,
   CheckCircle2,
+  PartyPopper,
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
@@ -23,9 +24,11 @@ import AffiliateModule from '@/components/modules/affiliate'
 import LinkForgeModule from '@/components/modules/linkforge'
 import JobsModule from '@/components/modules/jobs'
 import SettingsModule from '@/components/modules/settings'
+import BalloonsModule from '@/components/modules/balloons'
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'balloons', label: '🎈 Balloon Decor', icon: PartyPopper },
   { id: 'freelance', label: 'Freelance', icon: Briefcase },
   { id: 'store', label: 'Store', icon: ShoppingBag },
   { id: 'affiliate', label: 'Affiliate', icon: PenTool },
@@ -145,6 +148,7 @@ export default function Home() {
           </div>
         )}
         {tab === 'overview' && <Overview />}
+        {tab === 'balloons' && <BalloonsModule />}
         {tab === 'freelance' && <FreelanceModule />}
         {tab === 'store' && <StoreModule />}
         {tab === 'affiliate' && <AffiliateModule />}
