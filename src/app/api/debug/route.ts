@@ -1,27 +1,32 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@libsql/client'
+import { PrismaClient } from '@prisma/client'
+import { PrismaLibSql } from '@prisma/adapter-libsql'
 
 export async function GET() {
   const url = process.env.DATABASE_URL
   const token = process.env.DATABASE_AUTH_TOKEN
 
-  // Test 1: Can we see the env vars?
-  const envCheck = {
-    urlSet: !!url,
-    urlValue: url,
-    tokenSet: !!token,
-    tokenLength: token?.length,
-  }
-
-  // Test 2: Can we connect to Turso directly with libsql?
-  let directTest: string
+  let libsqlTest: string
   try {
     const client = createClient({ url: url!, authToken: token })
-    const result = await client.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    directTest = `SUCCESS - found ${result.rows.length} tables: ${result.rows.map(r => r.name).join(', ')}`
+    const result = await client.execute("SELECT COUNT(*) as count FROM FreelanceService")
+    libsqlTest = `SUCCESS - ${JSON.stringify(result.rows)}`
   } catch (e) {
-    directTest = `FAILED - ${e instanceof Error ? e.message : 'unknown error'}`
+    libsqlTest = `FAILED - ${e instanceof Error ? e.message : 'unknown'}`
   }
 
-  return NextResponse.json({ envCheck, directTest })
+  let prismaTest: string
+  try {
+    const libsql = createClient({ url: url!, authToken: token })
+    const adapter = new PrismaLibSql(libsql)
+    const prisma = new PrismaClient({ adapter })
+    const count = await prisma.freelanceService.count()
+    prismaTest = `SUCCESS - found ${count} services`
+    await prisma.$disconnect()
+  } catch (e) {
+    prismaTest = `FAILED - ${e instanceof Error ? e.message : 'unknown'}`
+  }
+
+  return NextResponse.json({ urlSet: !!url, libsqlTest, prismaTest })
 }
