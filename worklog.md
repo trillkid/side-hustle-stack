@@ -378,3 +378,29 @@ Stage Summary:
   - Option A: Copy-paste 3 articles into Medium, replace affiliate link placeholders once Amazon Associates is approved.
   - Option B: Follow DEPLOY.md to get a live Vercel URL in ~20 min. The live URL works for both Stripe and Amazon Associates signups, and makes the store/freelance/affiliate links shareable with real customers.
 - The app is now fully deployable. Local dev still works (SQLite file). Production uses Turso (libsql). No schema changes needed.
+
+---
+Task ID: 11
+Agent: main (orchestrator)
+Task: Balloon decor business — seasonal packages, dedicated tab, Google Business guide, seasonal social posts
+
+Work Log:
+- Added 9 seasonal balloon packages to Turso DB (3 wedding, 2 Halloween, 2 Christmas/holiday, 2 NYE). Combined with the 4 original balloon services = 13 total balloon packages live.
+- Built dedicated Balloon Decor module (`src/components/modules/balloons/index.tsx`):
+  - Pink/rose/purple themed hero with emojis + "Book your event" CTA
+  - Trust strip (Toronto & GTA, Custom colors, 3-5 day garlands)
+  - Gallery grid (6 category tiles with gradient backgrounds)
+  - Services grouped by category (Event Decor, Weddings, Seasonal) with colored headers
+  - Booking dialog (name, email, package select, event details) → POSTs to /api/freelance/leads
+  - Recent booking requests card (shows latest leads)
+  - All leads flow to the same Freelance inbox where the AI reply tool works
+- Wired as a new "🎈 Balloon Decor" tab (second position, right after Overview) in the hub.
+- Wrote `download/google-business-profile-setup.md` — 10-step guide to get found on Google Maps for "balloon decor Toronto": business naming (keywords + city), category (Balloon artist), service area (Toronto + GTA cities), photo strategy (10+ photos critical), description copy-paste, services/pricing table, weekly maintenance checklist (photos, reviews, posts, Q&A).
+- Wrote `download/seasonal-social-posts.md` — 20+ ready-to-copy posts: 3 wedding, 3 Halloween, 3 Christmas, 3 NYE, 6 year-round, plus a 12-month posting calendar (what to post each month) and posting tips.
+- Pushed to GitHub (needed new token from user). Vercel rebuilt. Verified live: 🎈 Balloon Decor tab renders with hero, gallery, 13 services across 3 categories, booking flow works.
+
+Stage Summary:
+- Live site now has a dedicated, professional balloon decor page — separate from the freelance tab, themed pink/rose, with 13 bookable packages.
+- 3 marketing guides saved in download/: balloon-business-marketing.md, google-business-profile-setup.md, seasonal-social-posts.md.
+- All balloon bookings flow into the same Leads inbox → AI reply tool works for balloon leads too.
+- Reminder: user should delete the GitHub token (deploy4) they just shared.
