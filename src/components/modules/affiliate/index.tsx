@@ -50,7 +50,7 @@ type Article = {
   affiliateUrl: string
   productName: string
   createdAt: string
-  _count: { clicks: number }
+  _count?: { clicks: number }
 }
 
 // ---------- Small UI helpers ----------
@@ -231,8 +231,8 @@ function ArticleCard({
         <div className="flex items-center justify-between gap-2">
           <Stars rating={article.rating} />
           <span className="text-xs text-muted-foreground">
-            {article._count.clicks}{' '}
-            {article._count.clicks === 1 ? 'click' : 'clicks'}
+            {(article._count?.clicks ?? 0)}{' '}
+            {(article._count?.clicks ?? 0) === 1 ? 'click' : 'clicks'}
           </span>
         </div>
 
@@ -536,8 +536,8 @@ function ReadReviewDialog({
                 </Badge>
                 <Stars rating={article.rating} size={16} />
                 <span className="text-xs text-muted-foreground">
-                  {article._count.clicks}{' '}
-                  {article._count.clicks === 1 ? 'click' : 'clicks'}
+                  {(article._count?.clicks ?? 0)}{' '}
+                  {(article._count?.clicks ?? 0) === 1 ? 'click' : 'clicks'}
                 </span>
               </div>
               <DialogTitle className="text-left text-xl">
@@ -627,7 +627,7 @@ export default function AffiliateModule() {
         if (!prev) return prev
         return prev.map((a) =>
           a.id === id
-            ? { ...a, _count: { clicks: a._count.clicks + delta } }
+            ? { ...a, _count: { clicks: (a._count?.clicks ?? 0) + delta } }
             : a
         )
       })
@@ -635,7 +635,7 @@ export default function AffiliateModule() {
         if (!prev || prev.id !== id) return prev
         return {
           ...prev,
-          _count: { clicks: prev._count.clicks + delta },
+          _count: { clicks: (prev._count?.clicks ?? 0) + delta },
         }
       })
     },
@@ -682,7 +682,7 @@ export default function AffiliateModule() {
 
   const stats = useMemo(() => {
     if (!articles) return { total: 0, clicks: 0, commission: 0 }
-    const clicks = articles.reduce((s, a) => s + a._count.clicks, 0)
+    const clicks = articles.reduce((s, a) => s + (a._count?.clicks ?? 0), 0)
     return {
       total: articles.length,
       clicks,

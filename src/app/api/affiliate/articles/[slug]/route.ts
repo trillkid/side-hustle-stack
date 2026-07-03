@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, dbClient } from '@/lib/db'
 
 export async function GET(
   _req: Request,
@@ -9,7 +9,6 @@ export async function GET(
     const { slug } = await params
     const article = await db.reviewArticle.findUnique({
       where: { slug },
-      include: { _count: { select: { clicks: true } } },
     })
 
     if (!article) {
@@ -19,7 +18,16 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ article })
+    // Manually compute click count (libsql doesn't support _count)
+    const clickResult = await dbClient.execute({
+      sql: 'SELECT COUNT(*) as cnt FROM AffiliateClick WHERE articleId = ?',
+      args: [article.id],
+    })
+    const clickCount = Number(clickResult.rows[0]?.cnt ?? 0)
+
+    const articleWithCount = { ...article, _count: { clicks: clickCount } }
+
+    return NextResponse.json({ article: articleWithCount })
   } catch (err) {
     console.error('[affiliate/articles/[slug] GET]', err)
     return NextResponse.json(

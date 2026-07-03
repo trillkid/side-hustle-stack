@@ -10,6 +10,9 @@ const globalForDb = globalThis as unknown as {
   __libsqlClient: Client | undefined
 }
 
+// Export the raw libsql client for direct queries (e.g., GROUP BY for counts)
+export const dbClient = getClient()
+
 function getClient(): Client {
   if (globalForDb.__libsqlClient) return globalForDb.__libsqlClient
 

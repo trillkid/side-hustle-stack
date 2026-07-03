@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, dbClient } from '@/lib/db'
 
 // Whitelist of allowed icon names (mapped on the client to lucide icons)
 const ALLOWED_ICONS = new Set([
@@ -8,6 +8,7 @@ const ALLOWED_ICONS = new Set([
   'Palette',
   'PenLine',
   'Code2',
+  'Heart',
 ])
 
 function normalizeIcon(icon: unknown): string {
@@ -20,11 +21,27 @@ export async function GET() {
     const services = await db.freelanceService.findMany({
       where: { active: true },
       orderBy: { createdAt: 'desc' },
-      include: {
-        _count: { select: { leads: true } },
-      },
     })
-    return NextResponse.json(services)
+
+    // Manually compute lead counts per service (libsql doesn't support _count)
+    const serviceIds = services.map((s: { id: string }) => s.id)
+    let leadCounts: Map<string, number> = new Map()
+    if (serviceIds.length > 0) {
+      const result = await dbClient.execute({
+        sql: `SELECT serviceId, COUNT(*) as cnt FROM FreelanceLead WHERE serviceId IN (${serviceIds.map(() => '?').join(',')}) GROUP BY serviceId`,
+        args: serviceIds,
+      })
+      for (const row of result.rows) {
+        leadCounts.set(row.serviceId as string, Number(row.cnt))
+      }
+    }
+
+    const servicesWithCounts = services.map((s: { id: string }) => ({
+      ...s,
+      _count: { leads: leadCounts.get(s.id) ?? 0 },
+    }))
+
+    return NextResponse.json(servicesWithCounts)
   } catch (err) {
     console.error('[freelance/services GET]', err)
     return NextResponse.json(
@@ -79,10 +96,12 @@ export async function POST(req: Request) {
         icon: normalizeIcon(body.icon),
         active: true,
       },
-      include: { _count: { select: { leads: true } } },
     })
 
-    return NextResponse.json(service, { status: 201 })
+    // Attach _count.leads: 0 for Prisma-compatible shape (new service)
+    const serviceWithCount = { ...service, _count: { leads: 0 } }
+
+    return NextResponse.json(serviceWithCount, { status: 201 })
   } catch (err) {
     console.error('[freelance/services POST]', err)
     return NextResponse.json(
