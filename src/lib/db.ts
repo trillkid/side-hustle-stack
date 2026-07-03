@@ -1,31 +1,27 @@
-import { PrismaClient } from '@prisma/client'
-import { PrismaLibSql } from '@prisma/adapter-libsql'
-import { createClient } from '@libsql/client'
+import { createClient, type Client } from '@libsql/client'
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+const globalForDb = globalThis as unknown as {
+  libsqlClient: Client | undefined
 }
 
-function createPrismaClient(): PrismaClient {
+function createDbClient(): Client {
   const url = process.env.DATABASE_URL
 
-  // No URL = local dev fallback (uses local SQLite via DATABASE_URL in .env)
+  // No URL = local dev (won't actually be used in production)
   if (!url) {
-    return new PrismaClient({ log: ['error', 'warn'] })
+    return createClient({ url: 'file:./db/custom.db' })
   }
 
   // Turso/libsql (production on Vercel)
   if (url.startsWith('libsql://')) {
     const authToken = process.env.DATABASE_AUTH_TOKEN
-    const libsql = createClient({ url, authToken })
-    const adapter = new PrismaLibSql(libsql)
-    return new PrismaClient({ adapter, log: ['error', 'warn'] })
+    return createClient({ url, authToken })
   }
 
   // Local SQLite file
-  return new PrismaClient({ log: ['error', 'warn'] })
+  return createClient({ url })
 }
 
-export const db = globalForPrisma.prisma ?? createPrismaClient()
+export const dbClient = globalForDb.libsqlClient ?? createDbClient()
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+if (process.env.NODE_ENV !== 'production') globalForDb.libsqlClient = dbClient
